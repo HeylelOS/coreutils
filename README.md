@@ -1,6 +1,65 @@
 # HeylelOS coreutils
 
   HeylelOS equivalent of the GNU coreutils.
+Trying to implement the following utilities as described in the [POSIX.1-2017](http://pubs.opengroup.org/onlinepubs/9699919799/) specification.
+
+## Utilities
+
+- [ ] basename
+- [x] cat
+- [ ] chgrp
+- [ ] chmod
+- [ ] chown
+- [ ] cksum
+- [ ] compress
+- [ ] cp
+- [ ] date
+- [ ] dd
+- [ ] df
+- [ ] dirname
+- [ ] du
+- [ ] echo
+- [ ] false
+- [ ] file
+- [ ] find
+- [ ] grep
+- [ ] head
+- [ ] id
+- [ ] ipcrm
+- [ ] ipcs
+- [ ] kill
+- [ ] link
+- [ ] ln
+- [ ] logname
+- [ ] ls
+- [ ] mkdir
+- [ ] mkfifo
+- [ ] mv
+- [ ] newgrp
+- [ ] nice
+- [ ] nl
+- [ ] nohup
+- [ ] od
+- [ ] printf
+- [ ] pwd
+- [ ] renice
+- [ ] rm
+- [ ] rmdir
+- [ ] sort
+- [ ] split
+- [ ] stat
+- [ ] tail
+- [ ] tee
+- [ ] test
+- [ ] time
+- [ ] touch
+- [ ] tsort
+- [ ] uname
+- [ ] uncompress
+- [ ] uniq
+- [ ] unlink
+- [ ] xargs
+- [ ] zcat
 
 ## Why not take one from another OS?
 
