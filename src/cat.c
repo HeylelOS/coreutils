@@ -11,6 +11,16 @@
 static char *catname; /**< Name of the program */
 static blksize_t outsize; /**< Best suiting IO block size for stdout */
 
+static void
+error(const char *errormsg,
+	const char *filename) {
+
+	fprintf(stderr, "%s: %s %s: %s\n",
+		catname, errormsg, filename, strerror(errno));
+
+	exit(1);
+}
+
 /**
  * This function returns the best suiting block size
  * for intensive IO concerning fd.
@@ -32,12 +42,35 @@ io_blksize(int fd) {
 }
 
 /**
+ * This function ensures every bytes are written
+ * @param fd The filedescriptor to write to
+ * @param buffer The buffer to write
+ * @param count How many bytes to write
+ * @return 0 on success, -1 on error, with errno set.
+ */
+static ssize_t
+full_write(int fd,
+	const char *buffer,
+	size_t count) {
+	ssize_t writeval;
+
+	while((writeval = write(fd, buffer, count)) < count
+		&& writeval != -1) {
+		count -= writeval;
+		buffer += writeval;
+	}
+
+	return writeval == -1 ? -1 : 0;
+}
+
+/**
  * This function dumps a filedescriptor on stdout
  * @param fd A filedescriptor, valid or invalid, to dump
  * @param filename Associated filename of the filedescriptor
  */
 static void
-cat_dump(int fd, char *filename) {
+fd_dump(int fd,
+	const char *filename) {
 	if(fd >= 0) {
 		blksize_t insize = io_blksize(fd);
 		size_t buffersize = (insize > outsize ? insize : outsize);
@@ -52,26 +85,20 @@ cat_dump(int fd, char *filename) {
 					(bufferleft < insize ? bufferleft : insize));
 
 				if(readval == -1) {
-					fprintf(stderr, "%s: Unable to read \"%s\": %s\n",
-						catname, filename, strerror(errno));
-					exit(1);
+					error("Unable to read", filename);
 				}
 
 				position += readval;
 			} while(position < end && readval != 0);
 
-			if(write(STDOUT_FILENO, buffer, position - buffer) == -1) {
-				fprintf(stderr, "%s: Unable to write \"%s\": %s\n",
-					catname, filename, strerror(errno));
-				exit(1);
+			if(full_write(STDOUT_FILENO, buffer, position - buffer) == -1) {
+				error("Unable to write", filename);
 			}
 
 			position = buffer;
 		} while(readval != 0);
 	} else {
-		fprintf(stderr, "%s: Invalid file %s: %s\n",
-			catname, filename, strerror(errno));
-		exit(1);
+		error("Invalid file", filename);
 	}
 }
 
@@ -98,15 +125,15 @@ main(int argc,
 	}
 
 	if(iterator == end) {
-		cat_dump(STDIN_FILENO, "-");
+		fd_dump(STDIN_FILENO, "-");
 	} else {
 		while(iterator != end) {
 			if(strcmp(*iterator, "-") == 0) {
-				cat_dump(STDIN_FILENO, "-");
+				fd_dump(STDIN_FILENO, "-");
 			} else {
 				int fd = open(*iterator, O_RDONLY);
 
-				cat_dump(fd, *iterator);
+				fd_dump(fd, *iterator);
 				close(fd);
 			}
 
