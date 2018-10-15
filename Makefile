@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS=-g -pedantic -Wall -fPIC -I./include
+CFLAGS=-O3 -pedantic -Wall -fPIC -I./include
 BUILDDIRS=build/ build/lib build/bin
 CORENAME=core
 CORELIBRARY=build/lib/lib$(CORENAME).so

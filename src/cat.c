@@ -22,10 +22,8 @@ cat_error(const char *errormsg,
 
 static void
 cat_flush(int fd, const char *filename) {
-	size_t insize = io_blocksize(fd);
 
-	switch(io_flush_to(fd, STDOUT_FILENO,
-		insize > outsize ? insize : outsize)) {
+	switch(io_flush_to(fd, STDOUT_FILENO, outsize)) {
 	case -1:
 		cat_error("Unable to read", filename);
 		/* noreturn */

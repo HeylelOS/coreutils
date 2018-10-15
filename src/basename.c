@@ -15,13 +15,24 @@ main(int argc,
 
 	fs_basename(argv[1], &begin, &end);
 
-	char *basename = strndup(begin, end - begin);
+	size_t basenamelen = end - begin;
+	char *basename = strndup(begin, basenamelen);
 
-	if(argc == 2) {
-		puts(basename);
-	} else {
-		/* suffix case */
+	if(argc == 3) {
+		char *suffix = argv[2];
+		size_t suffixlen = strlen(suffix);
+		char *basesuffix = basename + basenamelen - suffixlen;
+
+		if(basesuffix > basename) {
+			if(strcmp(basesuffix, suffix) == 0) {
+				*basesuffix = '\0';
+			}
+		}
 	}
+
+	puts(basename);
+
+	/* free(basename); */
 
 	return 0;
 }

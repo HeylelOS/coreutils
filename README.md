@@ -5,7 +5,7 @@ Trying to implement the following utilities as described in the [POSIX.1-2017](h
 
 ## Utilities
 
-- [ ] basename
+- [x] basename
 - [x] cat
 - [ ] chgrp
 - [ ] chmod
