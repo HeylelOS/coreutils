@@ -33,7 +33,7 @@ io_write_all(int fd,
 	return writeval == -1 ? -1 : 0;
 }
 
-int
+ssize_t
 io_dump_to(int fdsrc, size_t blksrc,
 	int fddest, size_t blkdest) {
 	size_t buffersize = (blksrc > blkdest ? blksrc : blkdest);
@@ -54,7 +54,8 @@ io_dump_to(int fdsrc, size_t blksrc,
 			position += readval;
 		} while(position < end && readval != 0);
 
-		if(io_write_all(fddest, buffer, position - buffer) == -1) {
+		if(readval != 0
+			&& io_write_all(fddest, buffer, position - buffer) == -1) {
 			return 1;
 		}
 
@@ -64,3 +65,18 @@ io_dump_to(int fdsrc, size_t blksrc,
 	return 0;
 }
 
+ssize_t
+io_flush_to(int fdsrc,
+	int fddest,
+	size_t blksize) {
+	char * const buffer = alloca(blksize);
+	ssize_t readval;
+
+	while((readval = read(fdsrc, buffer, blksize)) > 0) {
+		if(io_write_all(fddest, buffer, readval) == -1) {
+			return 1;
+		}
+	}
+
+	return readval;
+}

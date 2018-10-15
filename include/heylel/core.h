@@ -25,17 +25,42 @@ ssize_t
 io_write_all(int fd, const char *buffer, size_t count);
 
 /**
- * This function dumps fdsrc to fddest, the buffer is stack-allocated,
- * so beware the size you give!
+ * This function dumps fdsrc to fddest,
+ * io_dump_to tries to read at blksrc pace and write at blkdest pace.
+ * The buffer is stack-allocated, so beware the size you give!
  * @param fdsrc Valid source filedescriptor to dump
  * @param blksrc Best size of the buffer when reading
  * @param fddest Valid destination fildescriptor
  * @param blkdest Best size of the buffer for writing
- * @return 0 on success, -1 on failure on read, 1 on failure on write
+ * @return 0 on success, -1 on failure on read, 1 on failure on write, errno set on error
  */
-int
+ssize_t
 io_dump_to(int fdsrc, size_t blksrc,
 	int fddest, size_t blkdest);
+
+/**
+ * This function flushes fdsrc to fddest.
+ * io_flush_to tries to read and write at blksrc pace.
+ * The buffer is stack-allocated, so beware the size you give!
+ * @param fdsrc Valid source filedescriptor to dump
+ * @param blksrc Best size of the buffer when reading
+ * @param fddest Valid destination fildescriptor
+ * @return 0 on success, -1 on failure on read, 1 on failure on write, errno set on error
+ */
+ssize_t
+io_flush_to(int fdsrc, int fddest, size_t blksize);
+
+/* FS Function */
+
+/**
+ * Finds the beginning and the end of the basename
+ * @param path the path in which we get the basename, non-null
+ * @param begin pointer where the beginning of the basename is returned
+ * @param end pointer where the end of the basename is returned
+ * @return 0 on success, -1 on error
+ */
+ssize_t
+fs_basename(const char *path, const char **pbegin, const char **pend);
 
 /* HEYLEL_CORE_H */
 #endif

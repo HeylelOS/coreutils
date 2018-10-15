@@ -1,14 +1,15 @@
 CC=clang
-CFLAGS=-O3 -pedantic -Wall -fPIC -I./include
+CFLAGS=-g -pedantic -Wall -fPIC -I./include
 BUILDDIRS=build/ build/lib build/bin
 CORENAME=core
 CORELIBRARY=build/lib/lib$(CORENAME).so
-LDFLAGS=-l$(CORE) -L./build/lib
+LDFLAGS=-l$(CORENAME) -L./build/lib
+BASENAME=build/bin/basename
 CAT=build/bin/cat
 
 .PHONY: all clean
 
-all: $(BUILDDIRS) $(CORELIBRARY) $(CAT)
+all: $(BUILDDIRS) $(CORELIBRARY) $(BASENAME) $(CAT)
 
 clean:
 	rm -rf build/
@@ -16,8 +17,11 @@ clean:
 $(BUILDDIRS):
 	mkdir $@
 
-$(CORELIBRARY): src/core.c include/heylel/core.h
-	$(CC) $(CFLAGS) -shared -o $@ $<
+$(CORELIBRARY): src/core_fs.c src/core_io.c include/heylel/core.h
+	$(CC) $(CFLAGS) -shared -o $@ src/core_fs.c src/core_io.c
+
+$(BASENAME): src/basename.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(CAT): src/cat.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)

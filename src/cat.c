@@ -1,18 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 #include <errno.h>
-#include <alloca.h>
 
-static char *catname; /**< Name of the program */
-static blksize_t outsize; /**< Best suiting IO block size for stdout */
+#include <heylel/core.h>
+
+static char *catname;
+static size_t outsize;
 
 static void
-error(const char *errormsg,
+cat_error(const char *errormsg,
 	const char *filename) {
 
 	fprintf(stderr, "%s: %s %s: %s\n",
@@ -21,84 +20,20 @@ error(const char *errormsg,
 	exit(1);
 }
 
-/**
- * This function returns the best suiting block size
- * for intensive IO concerning fd.
- * @param fd The filedescriptor for which the buffer is selected.
- * @return The block size
- */
-static blksize_t
-io_blksize(int fd) {
-	struct stat stat;
-	blksize_t blksize;
-
-	if(fstat(fd, &stat) == 0) {
-		blksize = stat.st_blksize;
-	} else {
-		blksize = 512; /* Arbitrary unix buffer size */
-	}
-
-	return blksize;
-}
-
-/**
- * This function ensures every bytes are written
- * @param fd The filedescriptor to write to
- * @param buffer The buffer to write
- * @param count How many bytes to write
- * @return 0 on success, -1 on error, with errno set.
- */
-static ssize_t
-full_write(int fd,
-	const char *buffer,
-	size_t count) {
-	ssize_t writeval;
-
-	while((writeval = write(fd, buffer, count)) < count
-		&& writeval != -1) {
-		count -= writeval;
-		buffer += writeval;
-	}
-
-	return writeval == -1 ? -1 : 0;
-}
-
-/**
- * This function dumps a filedescriptor on stdout
- * @param fd A filedescriptor, valid or invalid, to dump
- * @param filename Associated filename of the filedescriptor
- */
 static void
-fd_dump(int fd,
-	const char *filename) {
-	if(fd >= 0) {
-		blksize_t insize = io_blksize(fd);
-		size_t buffersize = (insize > outsize ? insize : outsize);
-		char * const buffer = alloca(buffersize);
-		char *position = buffer, * const end = buffer + buffersize;
-		ssize_t readval;
+cat_flush(int fd, const char *filename) {
+	size_t insize = io_blocksize(fd);
 
-		do {
-			do {
-				size_t bufferleft = end - position;
-				readval = read(fd, position,
-					(bufferleft < insize ? bufferleft : insize));
-
-				if(readval == -1) {
-					error("Unable to read", filename);
-				}
-
-				position += readval;
-			} while(position < end && readval != 0);
-
-			if(full_write(STDOUT_FILENO, buffer, position - buffer) == -1) {
-				error("Unable to write", filename);
-			}
-
-			position = buffer;
-		} while(readval != 0);
-	} else {
-		error("Invalid file", filename);
+	switch(io_flush_to(fd, STDOUT_FILENO,
+		insize > outsize ? insize : outsize)) {
+	case -1:
+		cat_error("Unable to read", filename);
+		/* noreturn */
+	case 1:
+		cat_error("Unable to write", filename);
+		/* noreturn */
+	default:
+		break;
 	}
 }
 
@@ -114,9 +49,8 @@ main(int argc,
 	char **argv) {
 	char **iterator = argv + 1;
 	char **end = argv + argc;
-
 	catname = *argv;
-	outsize = io_blksize(STDOUT_FILENO);
+	outsize = io_blocksize(STDOUT_FILENO);
 
 	if(argc > 1
 		&& strcmp(*iterator, "-u") == 0) {
@@ -125,16 +59,20 @@ main(int argc,
 	}
 
 	if(iterator == end) {
-		fd_dump(STDIN_FILENO, "-");
+		cat_flush(STDIN_FILENO, "-");
 	} else {
 		while(iterator != end) {
 			if(strcmp(*iterator, "-") == 0) {
-				fd_dump(STDIN_FILENO, "-");
+				cat_flush(STDIN_FILENO, "-");
 			} else {
 				int fd = open(*iterator, O_RDONLY);
 
-				fd_dump(fd, *iterator);
-				close(fd);
+				if(fd != -1) {
+					cat_flush(fd, *iterator);
+					close(fd);
+				} else {
+					cat_error("Unable to open", *iterator);
+				}
 			}
 
 			iterator += 1;
