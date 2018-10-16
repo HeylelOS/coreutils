@@ -4,12 +4,16 @@ BUILDDIRS=build/ build/lib build/bin
 CORENAME=core
 CORELIBRARY=build/lib/lib$(CORENAME).so
 LDFLAGS=-l$(CORENAME) -L./build/lib
+
 BASENAME=build/bin/basename
 CAT=build/bin/cat
+ECHO=build/bin/echo
+UNLINK=build/bin/unlink
 
 .PHONY: all clean
 
-all: $(BUILDDIRS) $(CORELIBRARY) $(BASENAME) $(CAT)
+all: $(BUILDDIRS) $(CORELIBRARY) $(BASENAME) $(CAT)\
+	$(ECHO) $(UNLINK)
 
 clean:
 	rm -rf build/
@@ -26,3 +30,9 @@ $(BASENAME): src/basename.c
 $(CAT): src/cat.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+$(ECHO): src/echo.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -D ECHO_XSI -o $@-xsi $^ $(LDFLAGS)
+
+$(UNLINK): src/unlink.c
+	$(CC) $(CFLAGS) -o $@ $^

@@ -47,22 +47,18 @@ io_dump_to(int fdsrc, size_t blksrc,
 			readval = read(fdsrc, position,
 				(bufferleft < blksrc ? bufferleft : blksrc));
 
-			if(readval == -1) {
-				return -1;
-			}
-
 			position += readval;
-		} while(position < end && readval != 0);
+		} while(readval > 0 && position < end);
 
-		if(readval != 0
+		if(readval > 0
 			&& io_write_all(fddest, buffer, position - buffer) == -1) {
 			return 1;
 		}
 
 		position = buffer;
-	} while(readval != 0);
+	} while(readval > 0);
 
-	return 0;
+	return readval;
 }
 
 ssize_t
