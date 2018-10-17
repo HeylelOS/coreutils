@@ -18,16 +18,19 @@ static char *echoname;
 static void
 echo_flush(void) {
 	ssize_t writeval = write(STDOUT_FILENO, buffer, bufferpos - buffer);
-/*	for(size_t i = 0; i < (bufferpos - buffer); ++i) {
-		fprintf(stderr, "%p\n", (void*)(buffer + i));
-	}
-*/	if(writeval <= 0) {
-		if(writeval == -1) {
-			perror(echoname);
-		}
+
+	if(writeval <= 0) {
+		perror(echoname);
 		exit(1);
 	}
+
 	bufferpos -= writeval;
+}
+
+static void
+echo_pushchar(char c) {
+	*bufferpos = c;
+	bufferpos += 1;
 }
 
 /**
@@ -45,13 +48,12 @@ main(int argc,
 	echoname = *argv;
 	char **argpos = argv + 1;
 	char **argend = argv + argc;
+	char trailing = '\n';
 #ifdef ECHO_XSI
-#define trailing '\n'
 #define isoctal(n)	((n) >= 48 && (n) <= 55)
 	bool escaping = false;
 	int octal = -1;
-#else
-	char trailing = '\n';
+#else /* Not ECHO_XSI */
 	if(argc > 1
 		&& strcmp(*argpos, "-n") == 0) {
 		/* Like a majority of unix-like systems,
@@ -73,50 +75,45 @@ main(int argc,
 				octal += **argpos - '0';
 				*argpos += 1;
 			} else {
-				*bufferpos = (char)(octal & 0xFF);
-				bufferpos += 1;
+				echo_pushchar((char)(octal & 0xFF));
 				octal = -1;
 			}
 		} else
 #endif
 		if(**argpos == '\0') {
-			*bufferpos = ' ';
-			bufferpos += 1;
+			echo_pushchar(' ');
 			argpos += 1;
 #ifdef ECHO_XSI
 			escaping = false;
-#endif
 		} else {
-#ifdef ECHO_XSI
-			if(**argpos == '\\' && !escaping) {
-				escaping = true;
-				*argpos += 1;
-			} else if(escaping && **argpos == 'c') {
-				echo_flush();
-				return 0;
+			if(escaping && **argpos == 'c') {
+				trailing = '\0';
+				bufferpos += 1;
+				break;
 			} else if(escaping && **argpos == '0') {
 				octal = 0;
 				escaping = false;
 			} else {
-				if(escaping) {
+				if(**argpos == '\\' && !escaping) {
+					escaping = true;
+				} else if(escaping) {
 					switch(**argpos) {
-					case 'a': *bufferpos = '\a'; break;
-					case 'b': *bufferpos = '\b'; break;
-					case 'f': *bufferpos = '\f'; break;
-					case 'r': *bufferpos = '\r'; break;
-					case 'n': *bufferpos = '\n'; break;
-					case 't': *bufferpos = '\t'; break;
-					case 'v': *bufferpos = '\v'; break;
-					default: *bufferpos = **argpos; break; /* '\' will be wrote here */
+					case 'a': echo_pushchar('\a'); break;
+					case 'b': echo_pushchar('\b'); break;
+					case 'f': echo_pushchar('\f'); break;
+					case 'r': echo_pushchar('\r'); break;
+					case 'n': echo_pushchar('\n'); break;
+					case 't': echo_pushchar('\t'); break;
+					case 'v': echo_pushchar('\v'); break;
+					default: echo_pushchar(**argpos); break; /* '\' will be wrote here */
 					}
 					escaping = false;
-				} else {
+				} else
+#else /* Not ECHO_XSI */
+		} else { /* if(**argpos == '\0') */
 #endif
-					*bufferpos = **argpos;
-#ifdef ECHO_XSI
-				}
-#endif
-				bufferpos += 1;
+					echo_pushchar(**argpos);
+
 				*argpos += 1;
 #ifdef ECHO_XSI
 			}
@@ -124,22 +121,14 @@ main(int argc,
 		}
 	}
 
-#ifndef ECHO_XSI
-	if(trailing != '\0') {
-#endif
-		if(bufferpos != buffer) {
-			bufferpos[-1] = trailing;
-		} else {
-			*bufferpos = trailing;
-			bufferpos += 1;
-		}
-#ifndef ECHO_XSI
-	} else if(bufferpos != buffer) {
-		bufferpos -= 1;
+	if(bufferpos == buffer && trailing != '\0') {
+		bufferpos += 1;
 	}
-#endif
 
-	echo_flush();
+	if(bufferpos != buffer) {
+		bufferpos[-1] = trailing;
+		echo_flush();
+	}
 
 	return 0;
 }
