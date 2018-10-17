@@ -1,23 +1,28 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <alloca.h>
-#ifdef ECHO_XSI
-#include <stdbool.h>
-#else
+#ifndef ECHO_XSI
 #include <string.h>
 #endif
 
 #include <heylel/core.h>
 
-static char *buffer;
-static char *bufferpos;
-static char *bufferend;
-static char *echoname;
+static char *buffer;	/**< Buffer used for IO */
+static char *bufferpos;	/**< Current writing position in buffer */
+static char *bufferend;	/**< last position of buffer + 1 */
+static char *echoname;	/**< Name of the program */
 
+/* Writes as possible of the buffer as possible
+ * @param flushall Should we write everything?
+ * @return No return on error, prints error message
+ */ 
 static void
-echo_flush(void) {
-	ssize_t writeval = write(STDOUT_FILENO, buffer, bufferpos - buffer);
+echo_flush(bool flushall) {
+	ssize_t writeval = flushall ?
+		io_write_all(STDOUT_FILENO, buffer, bufferpos - buffer)
+		: write(STDOUT_FILENO, buffer, bufferpos - buffer);
 
 	if(writeval <= 0) {
 		perror(echoname);
@@ -27,6 +32,11 @@ echo_flush(void) {
 	bufferpos -= writeval;
 }
 
+/**
+ * push char on buffer, the buffer mustn't
+ * be filled
+ * @param c The character to push
+ */
 static void
 echo_pushchar(char c) {
 	*bufferpos = c;
@@ -65,7 +75,7 @@ main(int argc,
 
 	while(argpos != argend) {
 		if(bufferpos == bufferend) {
-			echo_flush();
+			echo_flush(false);
 		}
 
 #ifdef ECHO_XSI
@@ -127,7 +137,7 @@ main(int argc,
 
 	if(bufferpos != buffer) {
 		bufferpos[-1] = trailing;
-		echo_flush();
+		echo_flush(true);
 	}
 
 	return 0;

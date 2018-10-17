@@ -18,7 +18,7 @@ Trying to implement the following utilities as described in the [POSIX.1-2017](h
 - [ ] df
 - [ ] dirname
 - [ ] du
-- [~] echo + echo-xsi (an XSI compliant echo, both behaviors are different, cf. Standard)
+- [x] echo + echo-xsi (an XSI compliant echo, both behaviors are different, cf. Standard)
 - [ ] false
 - [ ] file
 - [ ] find
