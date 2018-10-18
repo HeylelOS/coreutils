@@ -5,6 +5,15 @@
 #include <string.h>
 #include <errno.h>
 
+#define UNIQ_MIN(a, b) ((a) < (b) ? (a) : (b))
+
+#define UNIQ_SWAP(type, a, b) \
+do {\
+	type c = (a);\
+	(a) = (b);\
+	(b) = c;\
+} while(false)
+
 char *uniqname;
 FILE *in, *out;
 static void (*uniq_print_occurrences)(char *, size_t);
@@ -177,21 +186,14 @@ uniq_equals(const char *str1, size_t len1,
 			&& memcmp(str1, str2, len1 + 1) == 0);
 }
 
-#define uniq_swap(type, a, b) \
-do {\
-	type c = a;\
-	a = b;\
-	b = c;\
-} while(false);
-
 int
 main(int argc,
 	char **argv) {
 	char *line = NULL, *previous = NULL;
 	size_t linecapacity = 0, previouscapacity = 0;
 	ssize_t linelen, previouslen;
-
 	size_t occurrences = 0;
+	size_t truncshift = 0;
 	uniq_init(argc, argv);
 
 	while((linelen = getline(&line, &linecapacity, in)) > 0) {
@@ -199,18 +201,26 @@ main(int argc,
 		linelen -= 1;
 		line[linelen] = '\0';
 
-		if(uniq_equals(line, linelen, previous, previouslen)) {
+		size_t linetruncshift = UNIQ_MIN(skipchars, linelen);
+
+		if(uniq_equals(line + linetruncshift,
+			linelen - linetruncshift,
+			previous + truncshift,
+			previouslen - truncshift)) {
+
 			occurrences += 1;
 		} else {
 			uniq_print_occurrences(previous, occurrences);
 			occurrences = 1;
 		}
 
-		uniq_swap(char *, line, previous);
-		uniq_swap(size_t, linecapacity, previouscapacity);
-		uniq_swap(ssize_t, linelen, previouslen);
+		UNIQ_SWAP(char *, line, previous);
+		UNIQ_SWAP(size_t, linecapacity, previouscapacity);
+		UNIQ_SWAP(ssize_t, linelen, previouslen);
+		UNIQ_SWAP(size_t, linetruncshift, truncshift);
 	}
 
+	uniq_print_occurrences(previous, occurrences);
 	free(line);
 	free(previous);
 
