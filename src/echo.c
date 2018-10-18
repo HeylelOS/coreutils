@@ -24,7 +24,8 @@ echo_flush(bool flushall) {
 		io_write_all(STDOUT_FILENO, buffer, bufferpos - buffer)
 		: write(STDOUT_FILENO, buffer, bufferpos - buffer);
 
-	if(writeval <= 0) {
+	if(writeval < 0
+		|| (!flushall && writeval == 0)) {
 		perror(echoname);
 		exit(1);
 	}
@@ -33,7 +34,7 @@ echo_flush(bool flushall) {
 }
 
 /**
- * push char on buffer, the buffer mustn't
+ * push char on buffer, the buffer must not
  * be filled
  * @param c The character to push
  */
@@ -44,8 +45,8 @@ echo_pushchar(char c) {
 }
 
 /**
- * The standard defines that non XSI compliant echo
- * shall not take any argument or modify input strings
+ * The standard defines that XSI compliant echo
+ * shall not take one argument and may expand input strings
  * that's why we also implement an echo-xsi version
  */
 int
@@ -77,7 +78,6 @@ main(int argc,
 		if(bufferpos == bufferend) {
 			echo_flush(false);
 		}
-
 #ifdef ECHO_XSI
 		if(octal != -1) {
 			if(isoctal(**argpos)) {
@@ -88,12 +88,9 @@ main(int argc,
 				echo_pushchar((char)(octal & 0xFF));
 				octal = -1;
 			}
-		} else
-#endif
-		if(**argpos == '\0') {
+		} else if(**argpos == '\0') {
 			echo_pushchar(' ');
 			argpos += 1;
-#ifdef ECHO_XSI
 			escaping = false;
 		} else {
 			if(escaping && **argpos == 'c') {
@@ -119,16 +116,19 @@ main(int argc,
 					}
 					escaping = false;
 				} else
-#else /* Not ECHO_XSI */
-		} else { /* if(**argpos == '\0') */
-#endif
-					echo_pushchar(**argpos);
-
+				echo_pushchar(**argpos);
 				*argpos += 1;
-#ifdef ECHO_XSI
 			}
-#endif
 		}
+#else /* Not ECHO_XSI */
+		if(**argpos == '\0') {
+			echo_pushchar(' ');
+			argpos += 1;
+		} else {
+			echo_pushchar(**argpos);
+			*argpos += 1;
+		}
+#endif
 	}
 
 	if(bufferpos == buffer && trailing != '\0') {
