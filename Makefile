@@ -8,12 +8,13 @@ LDFLAGS=-l$(CORENAME) -L./build/lib
 BASENAME=build/bin/basename
 CAT=build/bin/cat
 ECHO=build/bin/echo
+UNIQ=build/bin/uniq
 UNLINK=build/bin/unlink
 
 .PHONY: all clean
 
 all: $(BUILDDIRS) $(CORELIBRARY) $(BASENAME) $(CAT)\
-	$(ECHO) $(UNLINK)
+	$(ECHO) $(UNIQ) $(UNLINK)
 
 clean:
 	rm -rf build/
@@ -33,6 +34,9 @@ $(CAT): src/cat.c
 $(ECHO): src/echo.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 	$(CC) $(CFLAGS) -D ECHO_XSI -o $@-xsi $^ $(LDFLAGS)
+
+$(UNIQ): src/uniq.c
+	$(CC) $(CFLAGS) -o $@ $^
 
 $(UNLINK): src/unlink.c
 	$(CC) $(CFLAGS) -o $@ $^
