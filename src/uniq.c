@@ -16,6 +16,10 @@ do {\
 
 char *uniqname;
 FILE *in, *out;
+/**
+ * The following belongs to a class of function which prints
+ * the output depending on its occurrences
+ */
 static void (*uniq_print_occurrences)(char *, size_t);
 static size_t skipfields;
 static size_t skipchars;
@@ -161,6 +165,10 @@ uniq_parse_args(int argc,
 	}
 }
 
+/**
+ * Initializes global values and checks for
+ * usage printing
+ */
 static void
 uniq_init(int argc,
 	char **argv) {
@@ -177,6 +185,13 @@ uniq_init(int argc,
 	}
 }
 
+/**
+ * Indicates the position of the truncation
+ * in string
+ * @param string The string to truncate
+ * @param length Length of string
+ * @return Truncation index of string, <= length
+ */
 static size_t
 uniq_truncation(const char *string, size_t length) {
 	const char * const begin = string;
@@ -199,6 +214,15 @@ uniq_truncation(const char *string, size_t length) {
 	return string - begin + UNIQ_MIN(skipchars, end - string);
 }
 
+/**
+ * Returns whether str1 and str2 are equals,
+ * accepts NULL strings through their length
+ * @param str1 First string
+ * @param len1 Length of str1
+ * @param str2 Second string
+ * @param len2 Length of str2
+ * @return Whether str1 equals str2 or not
+ */
 static bool
 uniq_equals(const char *str1, size_t len1,
 	const char *str2, size_t len2) {
@@ -243,8 +267,8 @@ main(int argc,
 	}
 
 	uniq_print_occurrences(previous, occurrences);
-	free(line);
-	free(previous);
+	/* free(line); */
+	/* free(previous); */
 
 	return 0;
 }
