@@ -179,25 +179,8 @@ uniq_init(int argc,
 
 static size_t
 uniq_truncation(const char *string, size_t length) {
-	const char *end = string + length;
-	size_t skipped = skipfields;
 
-	while(string != end
-		&& skipped != 0) {
-		while(string != end
-			&& isblank(*string)) {
-			string += 1;
-		}
-
-		while(string != end
-			&& !isblank(*string)) {
-			string += 1;
-		}
-
-		skipped -= 1;
-	}
-
-	return UNIQ_MIN(skipchars, end - string);
+	return UNIQ_MIN(skipchars, length);
 }
 
 static bool
