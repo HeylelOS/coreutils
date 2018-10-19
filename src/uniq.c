@@ -179,8 +179,24 @@ uniq_init(int argc,
 
 static size_t
 uniq_truncation(const char *string, size_t length) {
+	const char * const begin = string;
+	const char * const end = string + length;
+	size_t skipped = skipfields;
 
-	return UNIQ_MIN(skipchars, length);
+	while(string != end
+		&& skipped != 0) {
+		while(string != end
+			&& isblank(*string)) {
+			string += 1;
+		}
+ 		while(string != end
+			&& !isblank(*string)) {
+			string += 1;
+		}
+ 		skipped -= 1;
+	}
+
+	return string - begin + UNIQ_MIN(skipchars, end - string);
 }
 
 static bool
@@ -218,12 +234,12 @@ main(int argc,
 		} else {
 			uniq_print_occurrences(previous, occurrences);
 			occurrences = 1;
-		}
 
-		truncshift = linetruncshift;
-		UNIQ_SWAP(char *, line, previous);
-		UNIQ_SWAP(size_t, linecapacity, previouscapacity);
-		UNIQ_SWAP(ssize_t, linelen, previouslen);
+			truncshift = linetruncshift;
+			UNIQ_SWAP(char *, line, previous);
+			UNIQ_SWAP(size_t, linecapacity, previouscapacity);
+			UNIQ_SWAP(ssize_t, linelen, previouslen);
+		}
 	}
 
 	uniq_print_occurrences(previous, occurrences);
