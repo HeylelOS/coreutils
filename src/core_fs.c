@@ -1,4 +1,6 @@
+#include <unistd.h>
 #include <string.h>
+#include <errno.h>
 
 #include <heylel/core.h>
 
@@ -36,4 +38,57 @@ fs_basename(const char *path,
 	return -1;
 }
 
+#define isperm(c) ((c) == 'r'\
+				|| (c) == 'w'\
+				|| (c) == 'x'\
+				|| (c) == 'X'\
+				|| (c) == 's'\
+				|| (c) == 't')
+
+#define isop(c) ((c) == '+'\
+				|| (c) == '-'\
+				|| (c) == '=')
+
+#define ispermcopy(c) ((c) == 'u'\
+				|| (c) == 'g'\
+				|| (c) == 'o')
+
+#define iswho(c) (ispermcopy((c))\
+				|| (c) == 'a')
+
+const char *
+fs_parsemask(const char *mask,
+	int isdir,
+	mode_t *mode) {
+	mode_t parsed = *mode;
+
+	do {
+		char * const whobegin = mask;
+		while(iswho(*mask)) {
+			mask += 1;
+		}
+		char * const whoend = mask;
+
+		if(isop(*mask)) {
+			do {
+				mask += 1;
+				if(ispermcopy(*mask)) {
+					mask += 1;
+				} else if(isperm(*mask)) {
+					do {
+						mask += 1;
+					} while(isperm(*mask));
+				} else {
+					break;
+				}
+			} while(isop(*mask));
+		} else {
+			break;
+		}
+	} while(*mask == ',');
+
+	*mode = parsed;
+
+	return mask;
+}
 

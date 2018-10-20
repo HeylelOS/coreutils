@@ -229,7 +229,7 @@ uniq_equals(const char *str1, size_t len1,
 
 	return (len1 == 0 && len2 == 0)
 		|| (len1 == len2
-			&& memcmp(str1, str2, len1 + 1) == 0);
+			&& memcmp(str1, str2, len1) == 0);
 }
 
 int

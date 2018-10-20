@@ -2,6 +2,7 @@
 #define HEYLEL_CORE_H
 
 #include <sys/types.h>
+#include <sys/stat.h>
 
 /* IO Function */
 
@@ -48,7 +49,9 @@ io_dump_to(int fdsrc, size_t blksrc,
  * @return 0 on success, -1 on failure on read, 1 on failure on write, errno set on error
  */
 ssize_t
-io_flush_to(int fdsrc, int fddest, size_t blksize);
+io_flush_to(int fdsrc,
+	int fddest,
+	size_t blksize);
 
 /* FS Function */
 
@@ -60,7 +63,22 @@ io_flush_to(int fdsrc, int fddest, size_t blksize);
  * @return 0 on success, -1 on error
  */
 ssize_t
-fs_basename(const char *path, const char **pbegin, const char **pend);
+fs_basename(const char *path,
+	const char **pbegin,
+	const char **pend);
+
+/**
+ * Parses mask as specified in the standard
+ * and returns a pointer to the last valid character
+ * @param mask The string to parse
+ * @param isdir Act like we target a directory
+ * @param mode Pointer to the mask to parse
+ * @return A pointer to the last valid character
+ */
+const char *
+fs_parsemask(const char *mask,
+	int isdir,
+	mode_t *mode);
 
 /* HEYLEL_CORE_H */
 #endif
