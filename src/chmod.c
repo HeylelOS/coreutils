@@ -1,46 +1,79 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ftw.h>
 #include <errno.h>
 
 #include <heylel/core.h>
 
 static char *chmodname;
-
-static void
-chmod_apply(const char *path,
-	const char *modeexp,
-	mode_t cmask) {
-	struct stat st;
-	mode_t mode;
-	int isdir;
-
-	if(stat(path, &st) == -1) {
-		fprintf(stderr, "error: %s stat: %s\n", chmodname, strerror(errno));
-		exit(1);
-	}
-
-	mode = st.st_mode;
-	if((S_IFMT & mode) == S_IFDIR) {
-		isdir = 1;
-	} else {
-		isdir = 0;
-	}
-
-	const char *last = fs_parsemode(modeexp, &mode, cmask, isdir);
-	if(*last == '\0') {
-		printf("%.7o -> %.7o\n", st.st_mode, mode);
-	} else {
-		fprintf(stderr, "error: %s: Unable to parse mode, stopped at '%c'\n",
-			chmodname, *last);
-		exit(1);
-	}
-}
+static mode_t cmask;
+static const char *modeexp;
+static int (*chmod_change)(const char *);
 
 static void
 chmod_usage(void) {
 	fprintf(stderr, "usage: %s [-R] mode file...\n", chmodname);
 	exit(1);
+}
+
+static int
+chmod_apply(const char *path,
+	const struct stat *st) {
+	mode_t mode = st->st_mode & (S_ISALL | S_IRWXA);
+	int isdir = (S_IFMT & mode) == S_IFDIR ?
+		1 : 0;
+	const char *last = fs_parsemode(modeexp,
+		&mode, cmask, isdir);
+	int retval = 0;
+
+	if(*last != '\0') {
+		fprintf(stderr, "error: %s: Unable to parse mode, stopped at '%c'\n",
+			chmodname, *last);
+		exit(1);
+	}
+
+	return chmod(path, mode);
+}
+
+static int
+chmod_change_default(const char *path) {
+	struct stat st;
+
+	if(stat(path, &st) == -1) {
+		fprintf(stderr, "error: %s stat: %s\n", chmodname, strerror(errno));
+		return -1;
+	}
+
+	return chmod_apply(path, &st);
+}
+
+static int
+chmod_fn(const char *path,
+	const struct stat *st,
+	int flag) {
+
+	switch(flag) {
+	case FTW_F:
+	case FTW_D:
+	case FTW_SL:
+		return chmod_apply(path, st);
+	case FTW_NS:
+		fprintf(stderr, "error: %s stat: %s\n",
+			chmodname, strerror(errno));
+		return -1;
+	case FTW_DNR:
+		fprintf(stderr, "error: %s: Unable to read directory %s\n",
+			chmodname, path);
+		return -1;
+	default:
+		return -1;
+	}
+}
+
+static int
+chmod_change_recursive(const char *path) {
+	return ftw(path, chmod_fn, 1);
 }
 
 int
@@ -49,6 +82,7 @@ main(int argc,
 	char ** const argend = argv + argc;
 	char **argpos = argv + 1;
 	chmodname = *argv;
+	chmod_change = chmod_change_default;
 
 	if(argc < 3) {
 		chmod_usage();
@@ -59,18 +93,22 @@ main(int argc,
 			chmod_usage();
 		}
 		argpos += 1;
-		/* NEEDED */
+		chmod_change = chmod_change_recursive;
 	}
 
-	const mode_t cmask = umask(S_IRWXA);
-	const char * const modeexp = *argpos;
+	int retval = 0;
+	cmask = umask(S_IRWXA);
+	modeexp = *argpos;
 	argpos += 1;
 
 	while(argpos != argend) {
-		chmod_apply(*argpos, modeexp, cmask);
+		if(chmod_change(*argpos) == -1) {
+			retval = -1;
+		}
+
 		argpos += 1;
 	}
 
-	return 0;
+	return retval;
 }
 

@@ -74,12 +74,18 @@ static mode_t
 fs_mask_permcopy(char copy,
 	mode_t source) {
 	switch(copy) {
-	case 'u':
-		return source | source >> 3 | source >> 6;
-	case 'g':
-		return source | source << 3 | source >> 3;
-	default: /* o */
-		return source | source << 3 | source << 6;
+	case 'u': {
+		mode_t mask = source & S_IRWXU;
+		return mask | mask >> 3 | mask >> 6;
+	}
+	case 'g': {
+		mode_t mask = source & S_IRWXG;
+		return mask | mask << 3 | mask >> 3;
+	}
+	default: { /* o */
+		mode_t mask = source & S_IRWXO;
+		return mask | mask << 3 | mask << 6;
+	}
 	}
 }
 
@@ -111,17 +117,19 @@ fs_mask_perm(char who,
 }
 
 static mode_t
-fs_mask_op(mode_t lhs,
-	mode_t rhs,
+fs_mask_op(mode_t mode,
+	mode_t whomask,
+	mode_t permmask,
 	char op) {
+	mode_t mask = whomask & permmask;
 
 	switch(op) {
 	case '+':
-		return lhs | rhs;
+		return mode | mask;
 	case '-':
-		return lhs & (~rhs);
+		return mode & ~mask;
 	default: /* = */
-		return rhs;
+		return (mode & ~(whomask & S_IRWXA)) | permmask;
 	}
 }
 
@@ -164,7 +172,7 @@ fs_parsemode(const char *expression,
 						whomask = ~cmask;
 					}
 					parsed = fs_mask_op(parsed,
-						whomask & permmask, op);
+						whomask, permmask, op);
 				}
 			} while(isop(*expression));
 		} else {

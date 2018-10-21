@@ -63,6 +63,7 @@ io_flush_to(int fdsrc,
 #define S_IWALL (S_IWUSR | S_IWGRP | S_IWOTH)
 #define S_IXALL (S_IXUSR | S_IXGRP | S_IXOTH)
 #define S_IRWXA (S_IRWXU | S_IRWXG | S_IRWXO)
+#define S_ISALL (S_ISUID | S_ISGID | S_ISVTX)
 
 /**
  * Finds the beginning and the end of the basename
