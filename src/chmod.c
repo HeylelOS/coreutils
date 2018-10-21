@@ -25,7 +25,6 @@ chmod_apply(const char *path,
 		1 : 0;
 	const char *last = fs_parsemode(modeexp,
 		&mode, cmask, isdir);
-	int retval = 0;
 
 	if(*last != '\0') {
 		fprintf(stderr, "error: %s: Unable to parse mode, stopped at '%c'\n",

@@ -267,6 +267,7 @@ main(int argc,
 	}
 
 	uniq_print_occurrences(previous, occurrences);
+
 	/* free(line); */
 	/* free(previous); */
 

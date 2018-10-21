@@ -112,11 +112,21 @@ main(int argc,
 					case 'n': echo_pushchar('\n'); break;
 					case 't': echo_pushchar('\t'); break;
 					case 'v': echo_pushchar('\v'); break;
-					default: echo_pushchar(**argpos); break; /* '\' will be wrote here */
+					default:
+						echo_pushchar('\\');
+						if(bufferpos == bufferend) {
+							echo_flush(false);
+						}
+						/* fallthrough */
+					case '\\':
+						echo_pushchar(**argpos);
+						break;
 					}
 					escaping = false;
-				} else
-				echo_pushchar(**argpos);
+				} else {
+					echo_pushchar(**argpos);
+				}
+
 				*argpos += 1;
 			}
 		}
