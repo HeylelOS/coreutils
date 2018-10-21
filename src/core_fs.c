@@ -56,39 +56,125 @@ fs_basename(const char *path,
 #define iswho(c) (ispermcopy((c))\
 				|| (c) == 'a')
 
+static mode_t
+fs_mask_who(char who) {
+	switch(who) {
+	case 'u':
+		return S_IRWXU | S_ISUID;
+	case 'g':
+		return S_IRWXG | S_ISGID;
+	case 'o':
+		return S_IRWXO;
+	default: /* a */
+		return S_IRWXA | S_ISUID | S_ISGID;
+	}
+}
+
+static mode_t
+fs_mask_permcopy(char copy,
+	mode_t source) {
+	switch(copy) {
+	case 'u':
+		return source | source >> 3 | source >> 6;
+	case 'g':
+		return source | source << 3 | source >> 3;
+	default: /* o */
+		return source | source << 3 | source << 6;
+	}
+}
+
+static mode_t
+fs_mask_perm(char who,
+	mode_t mode,
+	int isdir) {
+	switch(who) {
+	case 'r':
+		return S_IRALL;
+	case 'w':
+		return S_IWALL;
+	case 'x':
+		return S_IXALL;
+	case 'X': {
+		mode_t xmode = mode & S_IXALL;
+		if(isdir != 0
+			|| xmode != 0) {
+			return xmode;
+		} else {
+			return 0;
+		}
+	}
+	case 's':
+		return S_ISUID | S_ISGID;
+	default: /* t */
+		return S_ISVTX;
+	}
+}
+
+static mode_t
+fs_mask_op(mode_t lhs,
+	mode_t rhs,
+	char op) {
+
+	switch(op) {
+	case '+':
+		return lhs | rhs;
+	case '-':
+		return lhs & (~rhs);
+	default: /* = */
+		return rhs;
+	}
+}
+
 const char *
-fs_parsemask(const char *mask,
-	int isdir,
-	mode_t *mode) {
+fs_parsemode(const char *expression,
+	mode_t *mode,
+	mode_t cmask,
+	int isdir) {
 	mode_t parsed = *mode;
 
 	do {
-		char * const whobegin = mask;
-		while(iswho(*mask)) {
-			mask += 1;
+		mode_t whomask = 0;
+		while(iswho(*expression)) {
+			whomask |= fs_mask_who(*expression);
+			expression += 1;
 		}
-		char * const whoend = mask;
 
-		if(isop(*mask)) {
+		if(isop(*expression)) {
 			do {
-				mask += 1;
-				if(ispermcopy(*mask)) {
-					mask += 1;
-				} else if(isperm(*mask)) {
+				const char op = *expression;
+				mode_t permmask = 0;
+
+				expression += 1;
+				if(ispermcopy(*expression)) {
+					permmask = fs_mask_permcopy(*expression,
+						parsed);
+					expression += 1;
+				} else if(isperm(*expression)) {
 					do {
-						mask += 1;
-					} while(isperm(*mask));
+						permmask |= fs_mask_perm(*expression,
+							*mode, isdir);
+						expression += 1;
+					} while(isperm(*expression));
 				} else {
 					break;
 				}
-			} while(isop(*mask));
+
+				if(permmask != 0) {
+					if(whomask == 0) {
+						whomask = ~cmask;
+					}
+					parsed = fs_mask_op(parsed,
+						whomask & permmask, op);
+				}
+			} while(isop(*expression));
 		} else {
 			break;
 		}
-	} while(*mask == ',');
+	} while(*expression == ','
+		&& *(expression += 1) != '\0');
 
 	*mode = parsed;
 
-	return mask;
+	return expression;
 }
 

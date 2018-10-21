@@ -7,6 +7,7 @@ LDFLAGS=-l$(CORENAME) -L./build/lib
 
 BASENAME=build/bin/basename
 CAT=build/bin/cat
+CHMOD=build/bin/chmod
 ECHO=build/bin/echo
 UNIQ=build/bin/uniq
 UNLINK=build/bin/unlink
@@ -14,7 +15,7 @@ UNLINK=build/bin/unlink
 .PHONY: all clean
 
 all: $(BUILDDIRS) $(CORELIBRARY) $(BASENAME) $(CAT)\
-	$(ECHO) $(UNIQ) $(UNLINK)
+	$(CHMOD) $(ECHO) $(UNIQ) $(UNLINK)
 
 clean:
 	rm -rf build/
@@ -29,6 +30,9 @@ $(BASENAME): src/basename.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(CAT): src/cat.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(CHMOD): src/chmod.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(ECHO): src/echo.c

@@ -56,6 +56,15 @@ io_flush_to(int fdsrc,
 /* FS Function */
 
 /**
+ * The following macros complete the mode mask
+ * set to include multiple usefull selections
+ */
+#define S_IRALL (S_IRUSR | S_IRGRP | S_IROTH)
+#define S_IWALL (S_IWUSR | S_IWGRP | S_IWOTH)
+#define S_IXALL (S_IXUSR | S_IXGRP | S_IXOTH)
+#define S_IRWXA (S_IRWXU | S_IRWXG | S_IRWXO)
+
+/**
  * Finds the beginning and the end of the basename
  * @param path the path in which we get the basename, non-null
  * @param begin pointer where the beginning of the basename is returned
@@ -68,17 +77,19 @@ fs_basename(const char *path,
 	const char **pend);
 
 /**
- * Parses mask as specified in the standard
+ * Parses expression as specified in the standard
  * and returns a pointer to the last valid character
- * @param mask The string to parse
+ * @param expression The string to parse
+ * @param mode mode to modify
+ * @param cmask Consider it the cmask of the process
  * @param isdir Act like we target a directory
- * @param mode Pointer to the mask to parse
- * @return A pointer to the last valid character
+ * @return A pointer to the last valid character of expression
  */
 const char *
-fs_parsemask(const char *mask,
-	int isdir,
-	mode_t *mode);
+fs_parsemode(const char *expression,
+	mode_t *mode,
+	mode_t cmask,
+	int isdir);
 
 /* HEYLEL_CORE_H */
 #endif
