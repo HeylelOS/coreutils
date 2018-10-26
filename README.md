@@ -5,33 +5,51 @@ Trying to implement the following utilities as described in the [POSIX.1-2017](h
 
 ## Utilities
 
+- [x] asa
+- [ ] awk Using the [original awk](https://github.com/onetrueawk/awk) for now.
 - [x] basename
+- [ ] bc Will do it later, maybe create a scriptutils package with all unix-core scripts
+- [ ] cal
 - [x] cat
 - [ ] chgrp
 - [x] chmod
 - [ ] chown
 - [ ] cksum
-- [ ] compress
 - [ ] cp
+- [ ] cmp
+- [ ] comm
+- [ ] command
+- [ ] csplit
+- [ ] cut
 - [ ] date
 - [ ] dd
 - [ ] df
+- [ ] diff
 - [ ] dirname
 - [ ] du
 - [x] echo + echo-xsi (an XSI compliant echo, both behaviors are different, cf. Standard)
+- [ ] expand
+- [ ] expr
 - [ ] false
 - [ ] file
 - [ ] find
+- [ ] fold
+- [ ] fuser
+- [ ] gencat
+- [ ] getconf
 - [ ] grep
 - [ ] head
 - [ ] id
 - [ ] ipcrm
 - [ ] ipcs
+- [ ] join
 - [ ] kill
 - [ ] link
 - [ ] ln
+- [ ] logger
 - [ ] logname
 - [ ] ls
+- [ ] mesg
 - [ ] mkdir
 - [ ] mkfifo
 - [ ] mv
@@ -40,26 +58,40 @@ Trying to implement the following utilities as described in the [POSIX.1-2017](h
 - [ ] nl
 - [ ] nohup
 - [ ] od
+- [ ] patch
+- [ ] pathchk
+- [ ] pr
 - [ ] printf
+- [ ] ps
 - [ ] pwd
 - [ ] renice
 - [ ] rm
 - [ ] rmdir
+- [ ] sh Using [bash](https://github.com/gitGNU/gnu_bash) as a replacement
+- [ ] sleep
 - [ ] sort
 - [ ] split
-- [ ] stat
+- [ ] strings
+- [ ] stty
+- [ ] tabs
 - [ ] tail
 - [ ] tee
 - [ ] test
 - [ ] time
 - [ ] touch
+- [ ] tput
+- [ ] tr
+- [ ] true
 - [ ] tsort
+- [ ] tty
+- [ ] ulimit
 - [ ] uname
-- [ ] uncompress
 - [x] uniq
 - [x] unlink
+- [ ] wc
+- [ ] what
+- [ ] who
 - [ ] xargs
-- [ ] zcat
 
 ## Why not take one from another OS?
 

@@ -5,8 +5,10 @@ CORENAME=core
 CORELIBRARY=build/lib/lib$(CORENAME).so
 LDFLAGS=-l$(CORENAME) -L./build/lib
 
+ASA=build/bin/asa
 BASENAME=build/bin/basename
 CAT=build/bin/cat
+CAL=build/bin/cal
 CHMOD=build/bin/chmod
 ECHO=build/bin/echo
 UNIQ=build/bin/uniq
@@ -14,7 +16,8 @@ UNLINK=build/bin/unlink
 
 .PHONY: all clean
 
-all: $(BUILDDIRS) $(CORELIBRARY) $(BASENAME) $(CAT)\
+all: $(BUILDDIRS) $(CORELIBRARY)\
+	$(ASA) $(BASENAME) $(CAT) $(CAL)\
 	$(CHMOD) $(ECHO) $(UNIQ) $(UNLINK)
 
 clean:
@@ -26,11 +29,17 @@ $(BUILDDIRS):
 $(CORELIBRARY): src/core_fs.c src/core_io.c include/heylel/core.h
 	$(CC) $(CFLAGS) -shared -o $@ src/core_fs.c src/core_io.c
 
+$(ASA): src/asa.c
+	$(CC) $(CFLAGS) -o $@ $^
+
 $(BASENAME): src/basename.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(CAT): src/cat.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(CAL): src/cal.c
+	$(CC) $(CFLAGS) -o $@ $^
 
 $(CHMOD): src/chmod.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)

@@ -102,7 +102,7 @@ main(int argc,
 
 	while(argpos != argend) {
 		if(chmod_change(*argpos) == -1) {
-			retval = -1;
+			retval = 1;
 		}
 
 		argpos += 1;
