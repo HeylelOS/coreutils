@@ -9,7 +9,7 @@ Trying to implement the following utilities as described in the [POSIX.1-2017](h
 - [ ] awk Using the [original awk](https://github.com/onetrueawk/awk) for now.
 - [x] basename
 - [ ] bc Will do it later, maybe create a scriptutils package with all unix-core scripts
-- [ ] cal
+- [x] cal
 - [x] cat
 - [ ] chgrp
 - [x] chmod
