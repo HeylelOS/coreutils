@@ -6,8 +6,14 @@
 
 typedef unsigned long cal_t;
 
+enum cal_format {
+	CalendarFormatYear,
+	CalendarFormatMonth,
+	CalendarFormatMonthYear
+};
+
 struct cal_date {
-	cal_t day; /**< Day in the month, first is 1 */
+	cal_t day; /**< Day of the month, first is 1 */
 	cal_t month; /**< Month of the year, between 1 and 12 */
 	cal_t year; /**< Year, between 1 and 9999 */
 };
@@ -18,35 +24,50 @@ struct cal_moninfo {
 };
 
 /**
- * Init the minfo structure
- * with t's month informations
+ * Init the minfo structure with date.month informations
  * @param minfo Pointer to a valid struct cal_minfo to fill
- * @param t Pointer to a valid struct tm containg the interesting month and year
+ * @param date Pointer to a valid struct cal_date containg the
+ * interesting month and year
  */
 static void
 cal_moninfo_init(struct cal_moninfo *minfo,
 	const struct cal_date *date) {
-	struct tm timeinfo = {
-		.tm_sec = 0,
-		.tm_min = 0,
-		.tm_hour = 12,
-		.tm_mday = 1,
-		.tm_mon = date->month - 1,
-		.tm_year = date->year - 1900,
+
+	/* Determine the week with Gauss' formula */
+	long w, y, c, Y, d, m;
+
+	m = date->month - 2;
+	d = date->day;
+	Y = date->year;
+	if(m <= 0) {
+		m += 12;
+		Y -= 1;
+	}
+	c = Y / 100;
+	y = Y % 100;
+	w = (d + (13 * m - 1) / 5 + y + y / 4 + c / 4 - 2 * c) % 7;
+
+	minfo->fwday = w < 0 ? w + 7 : w;
+
+	/* Determine the last day of month */
+	static const long gregorian[] = {
+		0 /* UNUSED */, 31, 28 /* UNUSED */, 31,
+		30, 31, 30, 31, 31, 30, 31, 30, 31
 	};
 
-	/* Determine beginning of month infos */
-	mktime(&timeinfo);
+	if(date->month != 2) {
+		minfo->lday = gregorian[date->month];
+	} else {
+		/* Handle leap year */
+		if((date->year % 4 == 0
+			&& date->year % 100 != 0)
+			|| date->year % 400 == 0) {
 
-	minfo->fwday = timeinfo.tm_wday;
-
-	/* Determine end of month infos */
-	timeinfo.tm_mon += 1;
-	timeinfo.tm_mday = 0;
-
-	mktime(&timeinfo);
-
-	minfo->lday = timeinfo.tm_mday;
+			minfo->lday = 29;
+		} else {
+			minfo->lday = 28;
+		}
+	}
 }
 
 /**
@@ -55,16 +76,26 @@ cal_moninfo_init(struct cal_moninfo *minfo,
 static void
 cal_fillftime(char *buffer,
 	size_t bufferlen,
-	const char *format,
+	enum cal_format f,
 	const struct cal_date *date) {
 	const struct tm timeinfo = {
-		.tm_mday = date->day,
+		.tm_mday = 1,
 		.tm_mon = date->month - 1,
 		.tm_year = date->year - 1900,
 	};
 	char *ftime = alloca(bufferlen);
+	const char *format;
+
+	if(f == CalendarFormatYear) {
+		format = "%Y";
+	} else if(f == CalendarFormatMonth) {
+		format = "%B";
+	} else { /* CalendarFormatMonthYear */
+		format = "%B %Y";
+	}
+
 	size_t length = strftime(ftime, bufferlen, format, &timeinfo);
-	size_t offset = (bufferlen - length) / 2;
+	const size_t offset = (bufferlen - length) / 2;
 
 	memset(buffer, ' ', offset);
 	length = strlen(strncpy(buffer + offset, ftime, bufferlen - offset));
@@ -81,7 +112,7 @@ cal_fillweek(char *buffer) {
 	struct tm t = { .tm_wday = 0 };
 
 	for(; t.tm_wday < 6; t.tm_wday += 1, buffer += 3) {
-		strftime(buffer, 3, "%a", &t);
+		strftime(buffer, 2, "%a", &t);
 		buffer[2] = ' ';
 	}
 	strftime(buffer, 2, "%a", &t);
@@ -90,7 +121,13 @@ cal_fillweek(char *buffer) {
 	return buffer;
 }
 
-static void
+/**
+ * Prints an equivalent of the format "%2lu" in
+ * buffer, not appending a NUL character
+ * @param buffer Valid pointer to a >= 2 allocated buffer
+ * @param day The value to print
+ */
+static inline void
 cal_sday(char *buffer,
 	cal_t day) {
 	const char decimal = day / 10 + '0';
@@ -100,6 +137,15 @@ cal_sday(char *buffer,
 	buffer[1] = digit;
 }
 
+/**
+ * Used to print days of a week of a month in a buffer >= 20,
+ * The buffer filled with spaces before and after the valid week days,
+ * Note spaces between following dates won't be re-written.
+ * @param buffer A valid pointer to a >= 20 allocated buffer
+ * @param minfo Valid pointer to a cal_moninfo of the month being printed
+ * @param step Where we are in the month
+ * @return The new step
+ */
 static cal_t
 cal_filldays(char *buffer,
 	const struct cal_moninfo *minfo,
@@ -107,15 +153,15 @@ cal_filldays(char *buffer,
 	char * const end = buffer + 20;
 
 	if(step == 1) {
-		size_t blanks = minfo->fwday * 3;
+		const size_t blanks = minfo->fwday * 3;
 		memset(buffer, ' ', blanks);
 		buffer += blanks;
-	}
 
-	char *spaces = buffer + 2;
-	while(spaces < end) {
-		*spaces = ' ';
-		spaces += 3;
+		char *spaces = buffer + 2;
+		while(spaces < end) {
+			*spaces = ' ';
+			spaces += 3;
+		}
 	}
 
 	for(; step <= minfo->lday && buffer < end;
@@ -131,13 +177,18 @@ cal_filldays(char *buffer,
 	return step;
 }
 
+/**
+ * Prints date's month description on standard output
+ * @param date Pointer to the date described, date.day unused
+ */
 static void
 cal_print_month(const struct cal_date *date) {
 	const size_t bufferlen = 21;
 	char * const buffer = alloca(bufferlen);
 	buffer[bufferlen - 1] = '\0';
 
-	cal_fillftime(buffer, bufferlen - 1, "%B %Y", date);
+	cal_fillftime(buffer, bufferlen - 1,
+		CalendarFormatMonthYear, date);
 	puts(buffer);
 
 	cal_fillweek(buffer);
@@ -153,6 +204,10 @@ cal_print_month(const struct cal_date *date) {
 	}
 }
 
+/**
+ * Prints date's year description on standard output
+ * @param date Pointer to the date described, date.day and date.month unused
+ */
 static void
 cal_print_year(const struct cal_date *date) {
 	const size_t bufferlen = 65;
@@ -169,7 +224,7 @@ cal_print_year(const struct cal_date *date) {
 		memcpy(w + 24, weeks, 20);
 	}
 
-	cal_fillftime(buffer, bufferlen - 1, "%Y", date);
+	cal_fillftime(buffer, bufferlen - 1, CalendarFormatYear, date);
 	puts(buffer);
 
 	struct cal_date d = {
@@ -179,23 +234,14 @@ cal_print_year(const struct cal_date *date) {
 	};
 
 	while(d.month != 12) {
-		char *b = buffer;
 		struct cal_moninfo minfos[3];
 
-		d.month += 1;
-		cal_moninfo_init(minfos, &d);
-		cal_fillftime(b, 20, "%B", &d);
-		b += 22;
-
-		d.month += 1;
-		cal_moninfo_init(minfos + 1, &d);
-		cal_fillftime(b, 20, "%B", &d);
-		b += 22;
-
-		d.month += 1;
-		cal_moninfo_init(minfos + 2, &d);
-		cal_fillftime(b, 20, "%B", &d);
-
+		for(int i = 0; i < 3; i += 1) {
+			d.month += 1;
+			cal_moninfo_init(minfos + i, &d);
+			cal_fillftime(buffer + 22 * i, 20,
+				CalendarFormatMonth, &d);
+		}
 		puts(buffer);
 
 		puts(weeks);
@@ -221,13 +267,12 @@ cal_usage(const char *calname) {
 int
 main(int argc,
 	char **argv) {
-	struct cal_date date = { 0 };
+	struct cal_date date = { 1 };
 
 	if(argc > 3) {
 		cal_usage(*argv);
 	} else if(argc != 1) {
 		char **argpos = argv + 1;
-		date.day = 0;
 
 		if(argc == 3) {
 			date.month = strtoul(*argpos, NULL, 10);
