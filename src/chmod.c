@@ -9,13 +9,6 @@
 static char *chmodname;
 static mode_t cmask;
 static const char *modeexp;
-static int (*chmod_change)(const char *);
-
-static void
-chmod_usage(void) {
-	fprintf(stderr, "usage: %s [-R] mode file...\n", chmodname);
-	exit(1);
-}
 
 static int
 chmod_apply(const char *path,
@@ -75,13 +68,19 @@ chmod_change_recursive(const char *path) {
 	return ftw(path, chmod_fn, 1);
 }
 
+static void
+chmod_usage(void) {
+	fprintf(stderr, "usage: %s [-R] mode file...\n", chmodname);
+	exit(1);
+}
+
 int
 main(int argc,
 	char **argv) {
-	char ** const argend = argv + argc;
 	char **argpos = argv + 1;
+	char ** const argend = argv + argc;
+	int (*chmod_change)(const char *) = chmod_change_default;
 	chmodname = *argv;
-	chmod_change = chmod_change_default;
 
 	if(argc < 3) {
 		chmod_usage();
