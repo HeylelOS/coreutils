@@ -41,7 +41,7 @@ chmod_change_default(const char *path) {
 }
 
 static int
-chmod_fn(const char *path,
+chmod_ftw(const char *path,
 	const struct stat *st,
 	int flag) {
 
@@ -65,7 +65,7 @@ chmod_fn(const char *path,
 
 static int
 chmod_change_recursive(const char *path) {
-	return ftw(path, chmod_fn, 1);
+	return ftw(path, chmod_ftw, 1);
 }
 
 static void

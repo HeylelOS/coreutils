@@ -13,7 +13,7 @@ Trying to implement the following utilities as described in the [POSIX.1-2017](h
 - [x] cat
 - [ ] chgrp
 - [x] chmod
-- [ ] chown
+- [x] chown
 - [ ] cksum
 - [ ] cp
 - [ ] cmp

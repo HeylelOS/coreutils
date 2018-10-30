@@ -18,7 +18,7 @@ static char *newgroup;
 static gid_t newgid;
 
 static int
-chown_change_default(const char *path) {
+chown_change_follow(const char *path) {
 	uid_t owner = newuid;
 	gid_t group;
 
@@ -59,6 +59,85 @@ chown_change_nofollow(const char *path) {
 	}
 
 	return lchown(path, owner, group);
+}
+
+static int
+chown_ftw_follow(const char *path,
+	const struct stat *st,
+	int flag,
+	struct FTW *ftw) {
+
+	switch(flag) {
+	case FTW_F:
+	case FTW_D:
+	case FTW_SL:
+	case FTW_NS:
+		return chown_change_follow(path);
+	case FTW_DNR:
+		fprintf(stderr, "error: %s: Unable to read directory %s\n",
+			chownname, path);
+		/* falltrough */
+	default:
+		return -1;
+	}
+}
+
+static int
+chown_ftw_nofollow(const char *path,
+	const struct stat *st,
+	int flag,
+	struct FTW *ftw) {
+
+	switch(flag) {
+	case FTW_F:
+	case FTW_D:
+	case FTW_SL:
+	case FTW_NS:
+		return chown_change_nofollow(path);
+	case FTW_DNR:
+		fprintf(stderr, "error: %s: Unable to read directory %s\n",
+			chownname, path);
+		/* falltrough */
+	default:
+		return -1;
+	}
+}
+
+static int
+chown_ftw_follow_head(const char *path,
+	const struct stat *st,
+	int flag,
+	struct FTW *ftw) {
+
+	if(ftw->level == 0) {
+		return chown_ftw_follow(path, st, flag, ftw);
+	} else {
+		return chown_ftw_nofollow(path, st, flag, ftw);
+	}
+}
+
+static int
+chown_change_recursive_follow(const char *path) {
+
+	return nftw(path,
+		chown_ftw_follow,
+		1, 0);
+}
+
+static int
+chown_change_recursive_nofollow(const char *path) {
+
+	return nftw(path,
+		chown_ftw_nofollow,
+		1, FTW_PHYS);
+}
+
+static int
+chown_change_recursive_follow_head(const char *path) {
+
+	return nftw(path,
+		chown_ftw_follow_head,
+		1, FTW_PHYS);
 }
 
 static void
@@ -136,7 +215,7 @@ main(int argc,
 	char **argv) {
 	char **argpos = argv + 1;
 	char ** const argend = argv + argc;
-	int (*chown_change)(const char *) = chown_change_default;
+	int (*chown_change)(const char *) = chown_change_follow;
 	chownname = *argv;
 
 	if(argc < 3) {
@@ -144,12 +223,16 @@ main(int argc,
 	}
 
 	if(strcmp(*argpos, "-R") == 0) {
+		chown_change = chown_change_recursive_nofollow;
 		argpos += 1;
 
 		while(argpos != argend) {
 			if(strcmp(*argpos, "-H") == 0) {
+				chown_change = chown_change_recursive_follow_head;
 			} else if(strcmp(*argpos, "-L") == 0) {
+				chown_change = chown_change_recursive_follow;
 			} else if(strcmp(*argpos, "-P") == 0) {
+				chown_change = chown_change_recursive_nofollow;
 			} else {
 				break;
 			}
