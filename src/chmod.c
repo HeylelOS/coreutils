@@ -26,6 +26,14 @@ chmod_apply(const char *path,
 	}
 
 	return chmod(path, mode);
+
+	int retval;
+	if((retval = chmod(path, mode)) == -1) {
+		fprintf(stderr, "error: %s chmod %s: %s\n",
+			chmodname, path, strerror(errno));
+	}
+
+	return retval;
 }
 
 static int

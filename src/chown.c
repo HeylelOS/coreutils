@@ -36,7 +36,13 @@ chown_change_follow(const char *path) {
 		group = newgid;
 	}
 
-	return chown(path, owner, group);
+	int retval;
+	if((retval = chown(path, owner, group)) == -1) {
+		fprintf(stderr, "error: %s chown %s: %s\n",
+			chownname, path, strerror(errno));
+	}
+
+	return retval;
 }
 
 static int
@@ -58,7 +64,13 @@ chown_change_nofollow(const char *path) {
 		group = newgid;
 	}
 
-	return lchown(path, owner, group);
+	int retval;
+	if((retval = lchown(path, owner, group)) == -1) {
+		fprintf(stderr, "error: %s lchown %s: %s\n",
+			chownname, path, strerror(errno));
+	}
+
+	return retval;
 }
 
 static int
@@ -149,7 +161,7 @@ chown_usage(void) {
 }
 
 static void
-chown_parse(char *ownergroup) {
+chown_assign(char *ownergroup) {
 	struct passwd *pwd;
 
 	newowner = strsep(&ownergroup, ":");
@@ -247,7 +259,7 @@ main(int argc,
 		chown_usage();
 	}
 
-	chown_parse(*argpos);
+	chown_assign(*argpos);
 	argpos += 1;
 
 	int retval = 0;

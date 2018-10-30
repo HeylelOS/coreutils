@@ -11,7 +11,7 @@ Trying to implement the following utilities as described in the [POSIX.1-2017](h
 - [ ] bc Will do it later, maybe create a scriptutils package with all unix-core scripts
 - [x] cal
 - [x] cat
-- [ ] chgrp
+- [x] chgrp
 - [x] chmod
 - [x] chown
 - [ ] cksum

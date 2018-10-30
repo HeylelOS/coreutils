@@ -9,6 +9,7 @@ ASA=build/bin/asa
 BASENAME=build/bin/basename
 CAT=build/bin/cat
 CAL=build/bin/cal
+CHGRP=build/bin/chgrp
 CHMOD=build/bin/chmod
 CHOWN=build/bin/chown
 ECHO=build/bin/echo
@@ -19,8 +20,8 @@ UNLINK=build/bin/unlink
 
 all: $(BUILDDIRS) $(CORELIBRARY)\
 	$(ASA) $(BASENAME) $(CAT) $(CAL)\
-	$(CHMOD) $(CHOWN) $(ECHO) $(UNIQ)\
-	$(UNLINK)
+	$(CHGRP) $(CHMOD) $(CHOWN) $(ECHO)\
+	$(UNIQ) $(UNLINK)
 
 clean:
 	rm -rf build/
@@ -41,6 +42,9 @@ $(CAT): src/cat.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(CAL): src/cal.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(CHGRP): src/chgrp.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(CHMOD): src/chmod.c
