@@ -8,7 +8,7 @@
 
 /**
  * This function returns the best suiting block size
- * for intensive IO concerning fd.
+ * for intensive IO concerning fd, or 512 else.
  * @param fd The filedescriptor for which the buffer is selected.
  * @return The block size
  */

@@ -14,7 +14,7 @@ static void
 cat_error(const char *errormsg,
 	const char *filename) {
 
-	fprintf(stderr, "%s: %s %s: %s\n",
+	fprintf(stderr, "error %s: %s %s: %s\n",
 		catname, errormsg, filename, strerror(errno));
 
 	exit(1);
@@ -25,10 +25,10 @@ cat_flush(int fd, const char *filename) {
 
 	switch(io_flush_to(fd, STDOUT_FILENO, outsize)) {
 	case -1:
-		cat_error("Unable to read", filename);
+		cat_error("read", filename);
 		/* noreturn */
 	case 1:
-		cat_error("Unable to write", filename);
+		cat_error("write", filename);
 		/* noreturn */
 	default:
 		break;
@@ -69,7 +69,7 @@ main(int argc,
 					cat_flush(fd, *iterator);
 					close(fd);
 				} else {
-					cat_error("Unable to open", *iterator);
+					cat_error("open", *iterator);
 				}
 			}
 
@@ -77,6 +77,6 @@ main(int argc,
 		}
 	}
 
-	exit(0);
+	return 0;
 }
 

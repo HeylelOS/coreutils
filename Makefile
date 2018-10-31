@@ -12,6 +12,7 @@ CAL=build/bin/cal
 CHGRP=build/bin/chgrp
 CHMOD=build/bin/chmod
 CHOWN=build/bin/chown
+CKSUM=build/bin/cksum
 ECHO=build/bin/echo
 UNIQ=build/bin/uniq
 UNLINK=build/bin/unlink
@@ -20,8 +21,8 @@ UNLINK=build/bin/unlink
 
 all: $(BUILDDIRS) $(CORELIBRARY)\
 	$(ASA) $(BASENAME) $(CAT) $(CAL)\
-	$(CHGRP) $(CHMOD) $(CHOWN) $(ECHO)\
-	$(UNIQ) $(UNLINK)
+	$(CHGRP) $(CHMOD) $(CHOWN) $(CKSUM)\
+	$(ECHO) $(UNIQ) $(UNLINK)
 
 clean:
 	rm -rf build/
@@ -52,6 +53,9 @@ $(CHMOD): src/chmod.c
 
 $(CHOWN): src/chown.c
 	$(CC) $(CFLAGS) -o $@ $^
+
+$(CKSUM): src/cksum.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(ECHO): src/echo.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
