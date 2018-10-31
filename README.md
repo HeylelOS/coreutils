@@ -14,7 +14,7 @@ Trying to implement the following utilities as described in the [POSIX.1-2017](h
 - [x] chgrp
 - [x] chmod
 - [x] chown
-- [ ] cksum
+- [x] cksum
 - [ ] cp
 - [ ] cmp
 - [ ] comm

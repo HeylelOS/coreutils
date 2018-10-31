@@ -8,8 +8,50 @@
 
 #include <heylel/core.h>
 
+/*
+	The following description is quoted from:
+	The Open Group Base Specifications Issue 7, 2018 edition
+	IEEE Std 1003.1-2017 (Revision of IEEE Std 1003.1-2008)
+	Copyright 2001-2018 IEEE and The Open Group.
+
+	The cksum utility shall calculate and write to standard output a
+	cyclic redundancy check (CRC) for each input file, and also write
+	to standard output the number of octets in each file.
+	The CRC used is based on the polynomial used for CRC error checking
+	in the ISO/IEC 8802-3:1996 standard (Ethernet).
+
+	The encoding for the CRC checksum is defined by the generating polynomial:
+
+	G(x)=x32+x26+x23+x22+x16+x12+x11+x10+x8+x7+x5+x4+x2+x+1
+
+	Mathematically, the CRC value corresponding to a given file
+	shall be defined by the following procedure:
+
+	1. The n bits to be evaluated are considered to be the coefficients
+	of a mod 2 polynomial M(x) of degree n-1. These n bits are the bits
+	from the file, with the most significant bit being the
+	most significant bit of the first octet of the file and the last bit
+	being the least significant bit of the last octet, padded
+	with zero bits (if necessary) to achieve an integral number of octets,
+	followed by one or more octets representing the length of the file as
+	a binary value, least significant octet first.
+	The smallest number of octets capable of representing
+	this integer shall be used.
+
+	2. M(x) is multiplied by x32 (that is, shifted left 32 bits)
+	and divided by G(x) using mod 2 division, producing
+	a remainder R(x) of degree <= 31.
+
+	3. The coefficients of R(x) are considered to be a 32-bit sequence.
+
+	4. The bit sequence is complemented and the result is the CRC.
+*/
+
 static char *cksumname;
 
+/*
+	The following table is generated from the polynomial seen above
+*/
 static const uint32_t cksum_crc32_table[UINT8_MAX + 1] = {
 	0x00000000, 0x04C11DB7, 0x09823B6E, 0x0D4326D9,
 	0x130476DC, 0x17C56B6B, 0x1A864DB2, 0x1E475005,
@@ -83,6 +125,7 @@ cksum_crc32_step(uint32_t crc32,
 	size_t size) {
 	const uint8_t *end = bytes + size;
 
+	/* We just append tu buffer to a partial crc32 */
 	while(bytes != end) {
 		const uint8_t index = (crc32 >> 24) ^ *bytes;
 		crc32 = (crc32 << 8) ^ cksum_crc32_table[index];
@@ -97,6 +140,7 @@ static uint32_t
 cksum_crc32_end(uint32_t crc32,
 	size_t size) {
 
+	/* Appending length to crc32 */
 	while(size != 0) {
 		const uint8_t index = (crc32 >> 24) ^ size;
 		crc32 = (crc32 << 8) ^ cksum_crc32_table[index];
@@ -104,6 +148,7 @@ cksum_crc32_end(uint32_t crc32,
 		size >>= 8;
 	}
 
+	/* Negate the final resulting bits */
 	return ~crc32;
 }
 
@@ -116,12 +161,24 @@ cksum(int fd, const char *path) {
 	ssize_t readval;
 
 	while((readval = read(fd, buffer, blksize)) > 0) {
+		/* Append buffer read */
 		size += readval;
 		crc32 = cksum_crc32_step(crc32, (const uint8_t *)buffer, readval);
 	}
 
 	if(readval == 0) {
-		printf("%u %lu %s\n", cksum_crc32_end(crc32, size), size, path);
+
+		/* Finalize the partial crc32 */
+		crc32 = cksum_crc32_end(crc32, size);
+
+		/* Write the results to stdout, standard
+		specifies no name and pre-space written if
+		no file specified */
+		if(path != NULL) {
+			printf("%u %lu %s\n", crc32, size, path);
+		} else {
+			printf("%u %lu\n", crc32, size);
+		}
 	} else {
 		fprintf(stderr, "error: %s read %s: %s\n",
 			cksumname, path, strerror(errno));
@@ -140,7 +197,7 @@ main(int argc,
 
 	if(argpos == argend) {
 
-		if(cksum(STDIN_FILENO, "") == -1) {
+		if(cksum(STDIN_FILENO, NULL) == -1) {
 			retval = 1;
 		}
 	} else {
