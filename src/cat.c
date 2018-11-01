@@ -5,7 +5,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include <heylel/core.h>
+#include "core_io.h"
 
 static char *catname;
 static size_t outsize;

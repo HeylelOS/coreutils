@@ -1,10 +1,31 @@
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
 
-#include <heylel/core.h>
+#ifndef HEYLEL_CORE_FS_H
+#define HEYLEL_CORE_FS_H
 
-ssize_t
+#include <sys/stat.h>
+
+#ifndef HEYLEL_UNUSED
+#define HEYLEL_UNUSED __attribute__((unused))
+#endif
+
+/**
+ * The following macros complete the mode mask
+ * set to include multiple useful selections
+ */
+#define S_IRALL (S_IRUSR | S_IRGRP | S_IROTH)
+#define S_IWALL (S_IWUSR | S_IWGRP | S_IWOTH)
+#define S_IXALL (S_IXUSR | S_IXGRP | S_IXOTH)
+#define S_IRWXA (S_IRWXU | S_IRWXG | S_IRWXO)
+#define S_ISALL (S_ISUID | S_ISGID | S_ISVTX)
+
+/**
+ * Finds the beginning and the end of the basename
+ * @param path the path in which we get the basename, non-null
+ * @param begin pointer where the beginning of the basename is returned
+ * @param end pointer where the end of the basename is returned
+ * @return 0 on success, -1 on error
+ */
+static ssize_t HEYLEL_UNUSED
 fs_basename(const char *path,
 	const char **pbegin,
 	const char **pend) {
@@ -133,7 +154,16 @@ fs_mask_op(mode_t mode,
 	}
 }
 
-const char *
+/**
+ * Parses expression as specified in the standard
+ * and returns a pointer to the last valid character
+ * @param expression The string to parse
+ * @param mode mode to modify
+ * @param cmask Consider it the cmask of the process
+ * @param isdir Act like we target a directory
+ * @return A pointer to the last valid character of expression
+ */
+static const char * HEYLEL_UNUSED
 fs_parsemode(const char *expression,
 	mode_t *mode,
 	mode_t cmask,
@@ -186,3 +216,5 @@ fs_parsemode(const char *expression,
 	return expression;
 }
 
+/* HEYLEL_CORE_FS_H */
+#endif

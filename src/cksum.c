@@ -6,7 +6,7 @@
 #include <errno.h>
 #include <alloca.h>
 
-#include <heylel/core.h>
+#include "core_io.h"
 
 /*
 	The following description is quoted from:
@@ -125,7 +125,7 @@ cksum_crc32_step(uint32_t crc32,
 	size_t size) {
 	const uint8_t *end = bytes + size;
 
-	/* We just append tu buffer to a partial crc32 */
+	/* We just append the buffer to a partial crc32 */
 	while(bytes != end) {
 		const uint8_t index = (crc32 >> 24) ^ *bytes;
 		crc32 = (crc32 << 8) ^ cksum_crc32_table[index];

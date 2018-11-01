@@ -4,7 +4,7 @@
 #include <ftw.h>
 #include <errno.h>
 
-#include <heylel/core.h>
+#include "core_fs.h"
 
 static char *chmodname;
 static mode_t cmask;

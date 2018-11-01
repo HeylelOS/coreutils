@@ -7,7 +7,7 @@
 #include <string.h>
 #endif
 
-#include <heylel/core.h>
+#include "core_io.h"
 
 static char *buffer;	/**< Buffer used for IO */
 static char *bufferpos;	/**< Current writing position in buffer */

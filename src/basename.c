@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <heylel/core.h>
+#include "core_fs.h"
 
 int
 main(int argc,
