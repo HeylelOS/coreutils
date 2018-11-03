@@ -19,7 +19,7 @@
 static size_t HEYLEL_UNUSED
 io_blocksize(int fd) {
 	struct stat stat;
-	blksize_t blksize;
+	size_t blksize;
 
 	if(fstat(fd, &stat) == 0) {
 		blksize = stat.st_blksize;
