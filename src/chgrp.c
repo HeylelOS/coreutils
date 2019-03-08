@@ -21,7 +21,7 @@ chgrp_change_follow(const char *path) {
 	struct stat st;
 
 	if(stat(path, &st) == -1) {
-		fprintf(stderr, "usage: %s stat %s: %s\n",
+		fprintf(stderr, "error: %s stat %s: %s\n",
 			chgrpname, path, strerror(errno));
 		exit(1);
 	}
@@ -41,7 +41,7 @@ chgrp_change_nofollow(const char *path) {
 	struct stat st;
 
 	if(lstat(path, &st) == -1) {
-		fprintf(stderr, "usage: %s lstat %s: %s\n",
+		fprintf(stderr, "error: %s lstat %s: %s\n",
 			chgrpname, path, strerror(errno));
 		exit(1);
 	}
