@@ -7,7 +7,7 @@
 
 #include "core_io.h"
 
-static char *catname;
+static const char *catname;
 static size_t outsize;
 
 static void

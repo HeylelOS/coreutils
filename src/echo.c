@@ -9,10 +9,10 @@
 
 #include "core_io.h"
 
+static const char *echoname;	/**< Name of the program */
 static char *buffer;	/**< Buffer used for IO */
 static char *bufferpos;	/**< Current writing position in buffer */
 static char *bufferend;	/**< last position of buffer + 1 */
-static char *echoname;	/**< Name of the program */
 
 /* Writes as possible of the buffer as possible
  * @param flushall Should we write everything?

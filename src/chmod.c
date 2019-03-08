@@ -6,9 +6,9 @@
 
 #include "core_fs.h"
 
-static char *chmodname;
-static mode_t cmask;
+static const char *chmodname;
 static const char *modeexp;
+static mode_t cmask;
 
 static int
 chmod_apply(const char *path,
@@ -25,10 +25,8 @@ chmod_apply(const char *path,
 		exit(1);
 	}
 
-	return chmod(path, mode);
-
-	int retval;
-	if((retval = chmod(path, mode)) == -1) {
+	int retval = chmod(path, mode);
+	if(retval == -1) {
 		fprintf(stderr, "error: %s chmod %s: %s\n",
 			chmodname, path, strerror(errno));
 	}
@@ -73,7 +71,8 @@ chmod_ftw(const char *path,
 
 static int
 chmod_change_recursive(const char *path) {
-	return ftw(path, chmod_ftw, 1);
+	return ftw(path, chmod_ftw,
+		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT));
 }
 
 static void

@@ -9,7 +9,7 @@
 #include "core_io.h"
 
 /*
-	The following description is quoted from:
+	The following comment is quoted from:
 	The Open Group Base Specifications Issue 7, 2018 edition
 	IEEE Std 1003.1-2017 (Revision of IEEE Std 1003.1-2008)
 	Copyright 2001-2018 IEEE and The Open Group.
@@ -47,7 +47,7 @@
 	4. The bit sequence is complemented and the result is the CRC.
 */
 
-static char *cksumname;
+static const char *cksumname;
 
 /*
 	The following table is generated from the polynomial seen above

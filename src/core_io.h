@@ -2,7 +2,9 @@
 #ifndef HEYLEL_CORE_IO_H
 #define HEYLEL_CORE_IO_H
 
+#include <unistd.h>
 #include <sys/stat.h>
+#include <alloca.h>
 
 #ifndef HEYLEL_UNUSED
 #define HEYLEL_UNUSED __attribute__((unused))

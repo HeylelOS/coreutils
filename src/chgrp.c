@@ -10,9 +10,11 @@
 #include <pwd.h>
 #include <grp.h>
 
-static char *chgrpname;
+#include "core_fs.h"
 
-static char *newgroup;
+static const char *chgrpname;
+
+static const char *newgroup;
 static gid_t newgid;
 
 static int
@@ -26,8 +28,8 @@ chgrp_change_follow(const char *path) {
 		exit(1);
 	}
 
-	int retval;
-	if((retval = chown(path, st.st_uid, group)) == -1) {
+	int retval = chown(path, st.st_uid, group);
+	if(retval == -1) {
 		fprintf(stderr, "error: %s chown %s: %s\n",
 			chgrpname, path, strerror(errno));
 	}
@@ -46,8 +48,8 @@ chgrp_change_nofollow(const char *path) {
 		exit(1);
 	}
 
-	int retval;
-	if((retval = lchown(path, st.st_uid, group)) == -1) {
+	int retval = lchown(path, st.st_uid, group);
+	if(retval == -1) {
 		fprintf(stderr, "error: %s lchown %s: %s\n",
 			chgrpname, path, strerror(errno));
 	}
@@ -115,7 +117,8 @@ chgrp_change_recursive_follow(const char *path) {
 
 	return nftw(path,
 		chgrp_ftw_follow,
-		1, 0);
+		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
+		0);
 }
 
 static int
@@ -123,7 +126,8 @@ chgrp_change_recursive_nofollow(const char *path) {
 
 	return nftw(path,
 		chgrp_ftw_nofollow,
-		1, FTW_PHYS);
+		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
+		FTW_PHYS);
 }
 
 static int
@@ -131,7 +135,8 @@ chgrp_change_recursive_follow_head(const char *path) {
 
 	return nftw(path,
 		chgrp_ftw_follow_head,
-		1, FTW_PHYS);
+		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
+		FTW_PHYS);
 }
 
 static void

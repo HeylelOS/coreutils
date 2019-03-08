@@ -14,8 +14,8 @@ do {\
 	(b) = c;\
 } while(false)
 
-char *uniqname;
-FILE *in, *out;
+static char *uniqname;
+static FILE *in, *out;
 /**
  * The following belongs to a class of function which prints
  * the output depending on its occurrences
@@ -80,6 +80,7 @@ uniq_parse_args(int argc,
 	char **argv) {
 	char **argpos = argv + 1;
 	char ** const argend = argv + argc;
+
 	if(argpos != argend
 		&& (**argpos == '-' || **argpos == '+')
 		&& (*argpos)[1] != '\0'

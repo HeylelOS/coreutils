@@ -1,5 +1,7 @@
+#ifndef __APPLE__
 #define _DEFAULT_SOURCE
 #define _XOPEN_SOURCE 500
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -11,12 +13,14 @@
 #include <pwd.h>
 #include <grp.h>
 
-static char *chownname;
+#include "core_fs.h"
 
-static char *newowner;
+static const char *chownname;
+
+static const char *newowner;
 static uid_t newuid;
 
-static char *newgroup;
+static const char *newgroup;
 static gid_t newgid;
 
 static int
@@ -38,8 +42,8 @@ chown_change_follow(const char *path) {
 		group = newgid;
 	}
 
-	int retval;
-	if((retval = chown(path, owner, group)) == -1) {
+	int retval = chown(path, owner, group);
+	if(retval == -1) {
 		fprintf(stderr, "error: %s chown %s: %s\n",
 			chownname, path, strerror(errno));
 	}
@@ -66,8 +70,8 @@ chown_change_nofollow(const char *path) {
 		group = newgid;
 	}
 
-	int retval;
-	if((retval = lchown(path, owner, group)) == -1) {
+	int retval = lchown(path, owner, group);
+	if(retval == -1) {
 		fprintf(stderr, "error: %s lchown %s: %s\n",
 			chownname, path, strerror(errno));
 	}
@@ -135,7 +139,8 @@ chown_change_recursive_follow(const char *path) {
 
 	return nftw(path,
 		chown_ftw_follow,
-		1, 0);
+		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
+		0);
 }
 
 static int
@@ -143,7 +148,8 @@ chown_change_recursive_nofollow(const char *path) {
 
 	return nftw(path,
 		chown_ftw_nofollow,
-		1, FTW_PHYS);
+		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
+		FTW_PHYS);
 }
 
 static int
@@ -151,7 +157,8 @@ chown_change_recursive_follow_head(const char *path) {
 
 	return nftw(path,
 		chown_ftw_follow_head,
-		1, FTW_PHYS);
+		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
+		FTW_PHYS);
 }
 
 static void

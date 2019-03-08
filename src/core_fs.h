@@ -3,6 +3,7 @@
 #define HEYLEL_CORE_FS_H
 
 #include <sys/stat.h>
+#include <sys/resource.h>
 
 #ifndef HEYLEL_UNUSED
 #define HEYLEL_UNUSED __attribute__((unused))
@@ -214,6 +215,18 @@ fs_parsemode(const char *expression,
 	*mode = parsed;
 
 	return expression;
+}
+
+#define HEYLEL_FDLIMIT_DEFAULT	1024
+static int HEYLEL_UNUSED
+fs_fdlimit(int deflimit) {
+	struct rlimit rl;
+
+	if(getrlimit(RLIMIT_NOFILE, &rl) == 0) {
+		return rl.rlim_cur;
+	} else {
+		return deflimit;
+	}
 }
 
 /* HEYLEL_CORE_FS_H */

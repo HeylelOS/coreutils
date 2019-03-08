@@ -11,6 +11,7 @@ CHMOD=build/bin/chmod
 CHOWN=build/bin/chown
 CKSUM=build/bin/cksum
 CMP=build/bin/cmp
+CP=build/bin/cp
 ECHO=build/bin/echo
 UNIQ=build/bin/uniq
 UNLINK=build/bin/unlink
@@ -20,7 +21,7 @@ UNLINK=build/bin/unlink
 all: $(BUILDDIRS)\
 	$(ASA) $(BASENAME) $(CAT) $(CAL)\
 	$(CHGRP) $(CHMOD) $(CHOWN) $(CKSUM)\
-	$(CMP) $(ECHO) $(UNIQ) $(UNLINK)
+	$(CMP) $(CP) $(ECHO) $(UNIQ) $(UNLINK)
 
 clean:
 	rm -rf build/
@@ -53,6 +54,9 @@ $(CKSUM): src/cksum.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(CMP): src/cmp.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(CP): src/cp.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(ECHO): src/echo.c

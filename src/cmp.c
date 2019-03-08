@@ -8,7 +8,7 @@
 
 #include "core_io.h"
 
-static char *cmpname;
+static const char *cmpname;
 
 static int
 cmp_stat(const char *path,
