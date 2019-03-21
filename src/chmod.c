@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <ftw.h>
 #include <errno.h>
 
@@ -14,8 +15,7 @@ static int
 chmod_apply(const char *path,
 	const struct stat *st) {
 	mode_t mode = st->st_mode & (S_ISALL | S_IRWXA);
-	int isdir = (S_IFMT & mode) == S_IFDIR ?
-		1 : 0;
+	int isdir = (S_IFMT & mode) == S_IFDIR ? 1 : 0;
 	const char *last = fs_parsemode(modeexp,
 		&mode, cmask, isdir);
 
@@ -84,21 +84,23 @@ chmod_usage(void) {
 int
 main(int argc,
 	char **argv) {
-	char **argpos = argv + 1;
-	char ** const argend = argv + argc;
 	int (*chmod_change)(const char *) = chmod_change_default;
+	char ** const argend = argv + argc;
+	char **argpos;
 	chmodname = *argv;
 
-	if(argc < 3) {
-		chmod_usage();
-	}
-
-	if(strcmp(argv[1], "-R") == 0) {
-		if(argc < 4) {
+	int c;
+	while((c = getopt(argc, argv, "R")) != -1) {
+		if(c == 'R') {
+			chmod_change = chmod_change_recursive;
+		} else {
 			chmod_usage();
 		}
-		argpos += 1;
-		chmod_change = chmod_change_recursive;
+	}
+
+	argpos = argv + optind;
+	if(argpos + 2 >= argend) {
+		chmod_usage();
 	}
 
 	int retval = 0;

@@ -29,74 +29,38 @@ cp_usage(void) {
 static void
 cp_parse_args(int argc,
 	char **argv) {
-	char **argend = argv + argc;
-	char **argpos = argv + 1;
+	int c;
 
-	if(argpos != argend
-		&& **argpos == '-') {
-		char *arg = *argpos + 1;
+	if(argc == 1) {
+		cp_usage();
+	}
 
-		if(*arg == 'R' && arg[1] == '\0') {
-			cpargs.recursive = true;
-			argpos += 1;
-
-			if(argpos != argend
-				&& **argpos == '-') {
-				char *arg = *argpos + 1;
-
-				if(*arg != '\0' && arg[1] == '\0') {
-					switch(*arg) {
-					case 'H':
-						cpargs.symlinks = SYMLINKS_FOLLOWARGS;
-						break;
-					case 'L':
-						cpargs.symlinks = SYMLINKS_FOLLOWALL;
-						break;
-					case 'P':
-						cpargs.symlinks = SYMLINKS_NOFOLLOW;
-						break;
-					default:
-						cp_usage();
-					}
-
-					argpos += 1;
-				}
-			}
+	while((c = getopt(argc, argv, "RLHPfip")) != -1) {
+		switch(c) {
+		case 'R':
+			cpargs.recursive = true; break;
+		case 'P':
+			cpargs.symlinks = SYMLINKS_NOFOLLOW; break;
+		case 'f':
+			cpargs.force = true; break;
+		case 'i':
+			cpargs.interactive = true; break;
+		case 'p':
+			cpargs.duplicate = true; break;
+		case 'H':
+			if(cpargs.recursive)
+				cpargs.symlinks = SYMLINKS_FOLLOWARGS;
+			/* fallthrough */
+		case 'L':
+			if(cpargs.recursive)
+				cpargs.symlinks = SYMLINKS_FOLLOWALL;
+			/* fallthrough */
+		default:
+			cp_usage();
 		}
 	}
 
-	if(argpos != argend
-		&& **argpos == '-') {
-		char *arg = *argpos + 1;
-
-		while(*arg != '\0') {
-			switch(*arg) {
-			case 'f':
-				cpargs.force = true;
-				break;
-			case 'i':
-				cpargs.interactive = true;
-				break;
-			case 'p':
-				cpargs.duplicate = true;
-				break;
-			case 'P':
-				if(!cpargs.recursive) {
-					cpargs.symlinks = SYMLINKS_NOFOLLOW;
-					break;
-				}
-				/* fallthrough */
-			default:
-				cp_usage();
-			}
-
-			arg += 1;
-		}
-
-		argpos += 1;
-	}
-
-	if(argend - argpos < 2) {
+	if(optind + 2 >= argc) {
 		cp_usage();
 	}
 }

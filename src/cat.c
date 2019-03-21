@@ -45,35 +45,34 @@ cat_flush(int fd, const char *filename) {
 int
 main(int argc,
 	char **argv) {
-	char **iterator = argv + 1;
-	char **end = argv + argc;
+	char ** const argend = argv + argc;
+	char **argpos;
+	char c;
 	catname = *argv;
 	outsize = io_blocksize(STDOUT_FILENO);
 
-	if(argc > 1
-		&& strcmp(*iterator, "-u") == 0) {
-		/* There is already no delay between read and writes in our case */
-		iterator += 1;
-	}
+	while((c = getopt(argc, argv, "u")) != -1);
+	/* There is already no delay between read and writes in our case */
+	argpos = argv + optind;
 
-	if(iterator == end) {
+	if(argpos == argend) {
 		cat_flush(STDIN_FILENO, "-");
 	} else {
-		while(iterator != end) {
-			if(strcmp(*iterator, "-") == 0) {
+		while(argpos != argend) {
+			if(strcmp(*argpos, "-") == 0) {
 				cat_flush(STDIN_FILENO, "-");
 			} else {
-				int fd = open(*iterator, O_RDONLY);
+				int fd = open(*argpos, O_RDONLY);
 
 				if(fd != -1) {
-					cat_flush(fd, *iterator);
+					cat_flush(fd, *argpos);
 					close(fd);
 				} else {
-					cat_error("open", *iterator);
+					cat_error("open", *argpos);
 				}
 			}
 
-			iterator += 1;
+			argpos += 1;
 		}
 	}
 

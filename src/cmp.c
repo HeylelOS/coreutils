@@ -102,27 +102,25 @@ main(int argc,
 	char **argv) {
 	cmpname = *argv;
 
-	if(argc < 3) {
-		cmp_usage();
-	}
-
-	char **argpos = argv + 1;
-	if(**argpos == '-') {
-		if(strcmp(*argpos, "-l") == 0) {
-			argpos += 1;
-		} else if(strcmp(*argpos, "-s") == 0) {
-			argpos += 1;
+	int c;
+	while((c = getopt(argc, argv, "ls")) != -1) {
+		switch(c) {
+		case 'l':
+			break;
+		case 's':
+			break;
+		default:
+			cmp_usage();
 		}
 	}
 
-	if(argpos + 2 != argv + argc) {
+	if(optind + 2 != argc) {
 		cmp_usage();
 	}
 
-	const char *file1 = argpos[0];
-	const char *file2 = argpos[1];
+	const char *file1 = argv[optind];
+	const char *file2 = argv[optind + 1];
 	int retval = 0;
-
 	/* If their names are equal, it's the same file */
 	if(strcmp(file1, file2) != 0) {
 		struct stat st1 = { .st_blksize = 512 };

@@ -120,7 +120,7 @@ static const uint32_t cksum_crc32_table[UINT8_MAX + 1] = {
 };
 
 static uint32_t
-cksum_crc32_step(uint32_t crc32,
+cksum_crc32_update(uint32_t crc32,
 	const uint8_t *bytes,
 	size_t size) {
 	const uint8_t *end = bytes + size;
@@ -139,7 +139,6 @@ cksum_crc32_step(uint32_t crc32,
 static uint32_t
 cksum_crc32_end(uint32_t crc32,
 	size_t size) {
-
 	/* Appending length to crc32 */
 	while(size != 0) {
 		const uint8_t index = (crc32 >> 24) ^ size;
@@ -163,11 +162,10 @@ cksum(int fd, const char *path) {
 	while((readval = read(fd, buffer, blksize)) > 0) {
 		/* Append buffer read */
 		size += readval;
-		crc32 = cksum_crc32_step(crc32, (const uint8_t *)buffer, readval);
+		crc32 = cksum_crc32_update(crc32, (const uint8_t *)buffer, readval);
 	}
 
 	if(readval == 0) {
-
 		/* Finalize the partial crc32 */
 		crc32 = cksum_crc32_end(crc32, size);
 

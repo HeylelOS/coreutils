@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 static int
 asa_map(char **linep, size_t *linecapp, FILE *filep) {
@@ -49,13 +50,20 @@ main(int argc,
 		int retval = 0;
 
 		while(argpos != argend) {
-			FILE *filep = fopen(*argpos, "r");
+			FILE *filep;
+
+			if(strcmp("-", *argpos) != 0) {
+				filep = fopen(*argpos, "r");
+			} else {
+				filep = stdin;
+			}
 
 			if(asa_map(&line, &linecap, filep) == -1) {
 				retval = 1;
 			}
 
 			fclose(filep);
+			++argpos;
 		}
 
 		return retval;

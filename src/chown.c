@@ -234,37 +234,42 @@ chown_assign(char *ownergroup) {
 int
 main(int argc,
 	char **argv) {
-	char **argpos = argv + 1;
-	char ** const argend = argv + argc;
 	int (*chown_change)(const char *) = chown_change_follow;
+	char ** const argend = argv + argc;
+	char **argpos;
 	chownname = *argv;
 
-	if(argc < 3) {
+	if(argc == 1) {
 		chown_usage();
 	}
 
-	if(strcmp(*argpos, "-R") == 0) {
+	int c;
+	if(strcmp(argv[1], "-R") == 0) {
 		chown_change = chown_change_recursive_nofollow;
-		argpos += 1;
+		argpos = argv + (optind = 2);
 
-		while(argpos != argend) {
-			if(strcmp(*argpos, "-H") == 0) {
-				chown_change = chown_change_recursive_follow_head;
-			} else if(strcmp(*argpos, "-L") == 0) {
-				chown_change = chown_change_recursive_follow;
-			} else if(strcmp(*argpos, "-P") == 0) {
-				chown_change = chown_change_recursive_nofollow;
-			} else {
-				break;
+		while((c = getopt(argc, argv, "HLP")) != -1) {
+			switch(c) {
+			case 'H':
+				chown_change = chown_change_recursive_follow_head; break;
+			case 'L':
+				chown_change = chown_change_recursive_follow; break;
+			case 'P':
+				chown_change = chown_change_recursive_nofollow; break;
+			default:
+				chown_usage();
 			}
-			argpos += 1;
 		}
-	} else if(strcmp(*argpos, "-h") == 0) {
-		chown_change = chown_change_nofollow;
-		argpos += 1;
+	} else while((c = getopt(argc, argv, "h")) != -1) {
+		if(c == 'h') {
+			chown_change = chown_change_nofollow;
+		} else {
+			chown_usage();
+		}
 	}
 
-	if(argpos + 1 >= argend) {
+	argpos = argv + optind;
+	if(argpos + 2 >= argend) {
 		chown_usage();
 	}
 

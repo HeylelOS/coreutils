@@ -32,7 +32,9 @@ main(int argc,
 
 	puts(basename);
 
-	/* free(basename); */
+#ifdef FULL_CLEANUP
+	free(basename);
+#endif
 
 	return 0;
 }

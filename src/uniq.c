@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <ctype.h>
 #include <string.h>
+#include <unistd.h>
+#include <ctype.h>
 #include <errno.h>
 
 #define UNIQ_MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -73,97 +74,70 @@ uniq_print_not_repeated(char *string,
 }
 
 /**
- * Well, that's awful, but that's the exact standard
+ * We only miss adding the '+' delimiter, must make a custom getopt
  */
 static int
 uniq_parse_args(int argc,
 	char **argv) {
-	char **argpos = argv + 1;
-	char ** const argend = argv + argc;
+	int retval = 0;
+	int c;
 
-	if(argpos != argend
-		&& (**argpos == '-' || **argpos == '+')
-		&& (*argpos)[1] != '\0'
-		&& (*argpos)[2] == '\0') {
-		switch((*argpos)[1]) {
+	while(retval == 0
+		&& (c = getopt(argc, argv, ":cdf:s:u")) != -1) {
+		switch(c) {
 		case 'c':
-			uniq_print_occurrences = uniq_print_count;
-			argpos += 1;
-			break;
+			uniq_print_occurrences = uniq_print_count; break;
 		case 'd':
-			uniq_print_occurrences = uniq_print_repeated;
-			argpos += 1;
-			break;
+			uniq_print_occurrences = uniq_print_repeated; break;
+		case 'f': {
+			char *endptr;
+			skipfields = strtoul(optarg, &endptr, 10);
+			if(*endptr != '\0') {
+				fprintf(stderr, "error: %s %s: Must be a decimal numeric\n", uniqname, optarg);
+				exit(1);
+			}
+		} break;
+		case 's': {
+			char *endptr;
+			skipchars = strtoul(optarg, &endptr, 10);
+			if(*endptr != '\0') {
+				fprintf(stderr, "error: %s %s: Must be a decimal numeric\n", uniqname, optarg);
+				exit(1);
+			}
+		} break;
 		case 'u':
-			uniq_print_occurrences = uniq_print_not_repeated;
-			argpos += 1;
-			break;
+			uniq_print_occurrences = uniq_print_not_repeated; break;
+		case ':':
+			fprintf(stderr, "error: %s -%c: Missing argument\n", uniqname, optopt);
+			/* fallthrough */
 		default:
+			optind = argc;
 			break;
 		}
 	}
 
-	if(argpos + 1 < argend
-		&& (strcmp(*argpos, "-f") == 0
-			|| strcmp(*argpos, "+f") == 0)) {
-		errno = 0;
-		char *endptr;
-		skipfields = strtoul(argpos[1], &endptr, 10);
-		if(errno != 0
-			|| argpos[1][0] == '\0'
-			|| *endptr != '\0') {
-			fprintf(stderr, "error: %s %s: Must be a decimal numeric\n", uniqname, argpos[1]);
-			exit(1);
-		}
-
-		argpos += 2;
-	}
-
-	if(argpos + 1 < argend
-		&& (strcmp(*argpos, "-s") == 0
-			|| strcmp(*argpos, "+s") == 0)) {
-		errno = 0;
-		char *endptr;
-		skipchars = strtoul(argpos[1], &endptr, 10);
-		if(errno != 0
-			|| argpos[1][0] == '\0'
-			|| *endptr != '\0') {
-			fprintf(stderr, "error: %s %s: Must be a decimal numeric\n", uniqname, argpos[1]);
-			exit(1);
-		}
-
-		argpos += 2;
-	}
-
-	if(argpos != argend) {
-		if(strcmp(*argpos, "-") != 0) {
-			if((in = fopen(*argpos, "r")) == NULL) {
-				fprintf(stderr, "error: %s %s: %s\n",
-					uniqname, *argpos, strerror(errno));
+	if(optind + 2 == argc) {
+		if(strcmp(argv[optind], "-") != 0) {
+			if((in = fopen(argv[optind], "r")) == NULL) {
+				fprintf(stderr, "error: %s %s: input %s\n",
+					uniqname, argv[optind], strerror(errno));
 				exit(1);
 			}
 		}
-		argpos += 1;
 
-		if(argpos != argend) {
-			if(strcmp(*argpos, "-") != 0) {
-				if((out = fopen(*argpos, "w")) == NULL) {
-					fprintf(stderr, "error: %s %s: %s\n",
-						uniqname, *argpos, strerror(errno));
-					exit(1);
-				}
+		optind += 1;
+		if(strcmp(argv[optind], "-") != 0) {
+			if((out = fopen(argv[optind], "w")) == NULL) {
+				fprintf(stderr, "error: %s %s: output %s\n",
+					uniqname, argv[optind], strerror(errno));
+				exit(1);
 			}
-			argpos += 1;
 		}
+	} else {
+		retval = -1;
 	}
 
-	if(argpos == argend) {
-		return 0;
-	} else {
-		fprintf(stderr, "error: %s: Expected end of arguments, "
-			"found '%s'\n", uniqname, *argpos);
-		return -1;
-	}
+	return retval;
 }
 
 /**
@@ -269,8 +243,10 @@ main(int argc,
 
 	uniq_print_occurrences(previous, occurrences);
 
-	/* free(line); */
-	/* free(previous); */
+#ifdef FULL_CLEANUP
+	free(line);
+	free(previous);
+#endif
 
 	return 0;
 }

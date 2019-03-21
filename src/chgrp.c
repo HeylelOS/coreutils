@@ -148,8 +148,9 @@ chgrp_usage(void) {
 }
 
 static void
-chgrp_assign(void) {
+chgrp_assign(const char *newgrp) {
 	struct group *grp;
+	newgroup = newgrp;
 
 	errno = 0;
 	if((grp = getgrnam(newgroup)) == NULL) {
@@ -179,46 +180,49 @@ chgrp_assign(void) {
 int
 main(int argc,
 	char **argv) {
-	char **argpos = argv + 1;
-	char ** const argend = argv + argc;
 	int (*chgrp_change)(const char *) = chgrp_change_follow;
+	char ** const argend = argv + argc;
+	char **argpos;
 	chgrpname = *argv;
 
-	if(argc < 3) {
+	if(argc == 1) {
 		chgrp_usage();
 	}
 
-	if(strcmp(*argpos, "-R") == 0) {
+	int c;
+	if(strcmp(argv[1], "-R") == 0) {
 		chgrp_change = chgrp_change_recursive_nofollow;
-		argpos += 1;
+		argpos = argv + (optind = 2);
 
-		while(argpos != argend) {
-			if(strcmp(*argpos, "-H") == 0) {
-				chgrp_change = chgrp_change_recursive_follow_head;
-			} else if(strcmp(*argpos, "-L") == 0) {
-				chgrp_change = chgrp_change_recursive_follow;
-			} else if(strcmp(*argpos, "-P") == 0) {
-				chgrp_change = chgrp_change_recursive_nofollow;
-			} else {
-				break;
+		while((c = getopt(argc, argv, "HLP")) != -1) {
+			switch(c) {
+			case 'H':
+				chgrp_change = chgrp_change_recursive_follow_head; break;
+			case 'L':
+				chgrp_change = chgrp_change_recursive_follow; break;
+			case 'P':
+				chgrp_change = chgrp_change_recursive_nofollow; break;
+			default:
+				chgrp_usage();
 			}
-			argpos += 1;
 		}
-	} else if(strcmp(*argpos, "-h") == 0) {
-		chgrp_change = chgrp_change_nofollow;
-		argpos += 1;
+	} else while((c = getopt(argc, argv, "h")) != -1) {
+		if(c == 'h') {
+			chgrp_change = chgrp_change_nofollow;
+		} else {
+			chgrp_usage();
+		}
 	}
 
-	if(argpos + 1 >= argend) {
+	argpos = argv + optind;
+	if(argpos + 2 >= argend) {
 		chgrp_usage();
 	}
 
-	newgroup = *argpos;
-	chgrp_assign();
+	chgrp_assign(*argpos);
 	argpos += 1;
 
 	int retval = 0;
-
 	while(argpos != argend) {
 
 		if(chgrp_change(*argpos) == -1) {
