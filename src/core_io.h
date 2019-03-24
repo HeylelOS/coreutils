@@ -83,7 +83,7 @@ io_write_all(int fd,
  * The buffer is stack-allocated, so beware the size you give!
  * @param fdsrc Valid source filedescriptor to dump
  * @param blksrc Best size of the buffer when reading
- * @param fddest Valid destination fildescriptor
+ * @param fddest Valid destination file descriptor
  * @param blkdest Best size of the buffer for writing
  * @return 0 on success, -1 on failure on read, 1 on failure on write, errno set on error
  */

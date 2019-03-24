@@ -14,7 +14,7 @@ static void
 cat_error(const char *errormsg,
 	const char *filename) {
 
-	fprintf(stderr, "error %s: %s %s: %s\n",
+	fprintf(stderr, "error: %s: %s %s: %s\n",
 		catname, errormsg, filename, strerror(errno));
 
 	exit(1);
