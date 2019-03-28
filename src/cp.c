@@ -18,21 +18,21 @@
 #include "core_io.h"
 
 static const char *cpname;
-static unsigned int cpargs;
+static struct {
+	unsigned recursive : 1;
+	unsigned force : 1;
+	unsigned interactive : 1;
+	unsigned duplicate : 1;
+	unsigned nofollowsources : 1;
+	unsigned followtraversal : 1;
+} cpargs;
 static int cpfdlimit;
 static char cpdestfile[PATH_MAX];
 static char *cptargetend;
 
-#define CP_RECURSIVE          (1)
-#define CP_FORCE              (1 << 1)
-#define CP_INTERACTIVE        (1 << 2)
-#define CP_DUPLICATE          (1 << 3)
-#define CP_NOFOLLOW_SOURCES   (1 << 4)
-#define CP_FOLLOW_TRAVERSAL   (1 << 5)
-
-#define CP_IS_RECURSIVE()      ((cpargs & CP_RECURSIVE) != 0)
-#define CP_FOLLOWS_SOURCES()   ((cpargs & CP_NOFOLLOW_SOURCES) == 0)
-#define CP_FOLLOWS_TRAVERSAL() ((cpargs & CP_FOLLOW_TRAVERSAL) != 0)
+#define CP_IS_RECURSIVE()      (cpargs.recursive == 1)
+#define CP_FOLLOWS_SOURCES()   (cpargs.nofollowsources == 0)
+#define CP_FOLLOWS_TRAVERSAL() (cpargs.followtraversal != 0)
 
 static void
 cp_usage(void) {
@@ -55,29 +55,32 @@ cp_parse_args(int argc,
 	while((c = getopt(argc, argv, "RLHPfip")) != -1) {
 		switch(c) {
 		case 'R':
-			cpargs |= CP_RECURSIVE;
+			cpargs.recursive = 1;
 			break;
 		case 'P':
-			cpargs = (cpargs | CP_NOFOLLOW_SOURCES) & ~CP_FOLLOW_TRAVERSAL;
+			cpargs.nofollowsources = 1;
+			cpargs.followtraversal = 0;
 			break;
 		case 'f':
-			cpargs |= CP_FORCE;
+			cpargs.force = 1;
 			break;
 		case 'i':
-			cpargs |= CP_INTERACTIVE;
+			cpargs.interactive = 1;
 			break;
 		case 'p':
-			cpargs |= CP_DUPLICATE;
+			cpargs.duplicate = 1;
 			break;
 		case 'H':
 			if(CP_IS_RECURSIVE()) {
-				cpargs &= ~(CP_FOLLOW_TRAVERSAL | CP_NOFOLLOW_SOURCES);
+				cpargs.nofollowsources = 0;
+				cpargs.followtraversal = 0;
 				break;
 			}
 			/* fallthrough */
 		case 'L':
 			if(CP_IS_RECURSIVE()) {
-				cpargs = (cpargs | CP_FOLLOW_TRAVERSAL) & ~CP_NOFOLLOW_SOURCES;
+				cpargs.nofollowsources = 0;
+				cpargs.followtraversal = 1;
 				break;
 			}
 			/* fallthrough */
