@@ -6,7 +6,7 @@
 int
 main(int argc,
 	char **argv) {
-	const char *begin, *end;
+	char const *begin, *end;
 
 	if(argc < 2 || argc > 3) {
 		fprintf(stderr, "usage: %s string [suffix]\n", *argv);

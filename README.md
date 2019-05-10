@@ -78,7 +78,7 @@ do not hesitate to contact me.
 - [ ] renice
 - [ ] rm
 - [ ] rmdir
-- [ ] sh Using [bash](https://github.com/gitGNU/gnu_bash) as a replacement
+- [ ] sh Using [zsh](https://github.com/zsh-users/zsh) as a replacement
 - [ ] sleep
 - [ ] sort
 - [ ] split

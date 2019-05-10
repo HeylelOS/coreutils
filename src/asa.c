@@ -63,7 +63,7 @@ main(int argc,
 			}
 
 			fclose(filep);
-			++argpos;
+			argpos += 1;
 		}
 
 		return retval;

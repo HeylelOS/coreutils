@@ -7,13 +7,12 @@
 typedef unsigned long cal_t;
 
 enum cal_format {
-	CalendarFormatYear,
-	CalendarFormatMonth,
-	CalendarFormatMonthYear
+	CALENDAR_FORMAT_YEAR,
+	CALENDAR_FORMAT_MONTH,
+	CALENDAR_FORMAT_MONTH_YEAR
 };
 
 struct cal_date {
-	cal_t day; /**< Day of the month, first is 1 */
 	cal_t month; /**< Month of the year, between 1 and 12 */
 	cal_t year; /**< Year, between 1 and 9999 */
 };
@@ -30,16 +29,13 @@ struct cal_moninfo {
  * @return 1 if it's a leap year, 0 else
  */
 static inline cal_t
-cal_leap_year(const struct cal_date *date) {
+cal_leap_year(struct cal_date const *date) {
 	cal_t leap = 0;
 
 	/* Test whether Gregorian or Julian calendar */
 	if(date->year > 1752
-		|| ((date->year == 1752
-			&& date->month > 9)
-				|| (date->year == 1752
-					&& date->month == 9
-					&& date->day >= 14))) {
+		|| (date->year == 1752
+			&& date->month > 9)) {
 		if((date->year % 4 == 0
 			&& date->year % 100 != 0)
 			|| date->year % 400 == 0) {
@@ -60,7 +56,7 @@ cal_leap_year(const struct cal_date *date) {
  */
 static void
 cal_moninfo_init(struct cal_moninfo *minfo,
-	const struct cal_date *date) {
+	struct cal_date const *date) {
 
 	/* Determine the week with Gauss' formula */
 	long m = date->month - 2;
@@ -69,15 +65,15 @@ cal_moninfo_init(struct cal_moninfo *minfo,
 		m += 12;
 		Y -= 1;
 	}
-	const long d = date->day,
+	long const d = 1,
 		c = Y / 100,
-		y = Y % 100,
-		w = (d + (13 * m - 1) / 5 + y + y / 4 + c / 4 - 2 * c) % 7;
+		y = Y % 100;
+	long const w = (d + (13 * m - 1) / 5 + y + y / 4 + c / 4 - 2 * c) % 7;
 
 	minfo->fwday = w < 0 ? w + 7 : w;
 
 	/* Determine the last day of month */
-	static const cal_t gregorian[] = {
+	static cal_t const gregorian[] = {
 		0 /* UNUSED */, 31, 28 /* UNUSED */, 31,
 		30, 31, 30, 31, 31, 30, 31, 30, 31
 	};
@@ -102,28 +98,47 @@ static void
 cal_fillftime(char *buffer,
 	size_t bufferlen,
 	enum cal_format f,
-	const struct cal_date *date) {
-	const struct tm timeinfo = {
+	struct cal_date const *date) {
+#ifdef CAL_LOCALIZED
+	struct tm const timeinfo = {
 		.tm_mday = 1,
 		.tm_mon = date->month - 1,
 		.tm_year = date->year - 1900,
 	};
-	char *ftime = alloca(bufferlen);
-	const char *format;
+	char const *format;
 
-	if(f == CalendarFormatYear) {
+	if(f == CALENDAR_FORMAT_YEAR) {
 		format = "%Y";
-	} else if(f == CalendarFormatMonth) {
+	} else if(f == CALENDAR_FORMAT_MONTH) {
 		format = "%B";
-	} else { /* CalendarFormatMonthYear */
+	} else { /* CALENDAR_FORMAT_MONTH_YEAR */
 		format = "%B %Y";
 	}
 
-	size_t length = strftime(ftime, bufferlen, format, &timeinfo);
-	const size_t offset = (bufferlen - length) / 2;
+	size_t length = strftime(buffer, bufferlen, format, &timeinfo);
+#else
+	static char const * const months[] = {
+		"January", "Februrary", "March", "April", "May", "June",
+		"July", "August", "September", "October", "November", "December"
+	};
+	size_t length;
 
+	if(f == CALENDAR_FORMAT_YEAR) {
+		length = snprintf(buffer, bufferlen, "%lu", date->year);
+	} else if(f == CALENDAR_FORMAT_MONTH) {
+		length = snprintf(buffer, bufferlen, "%s", months[date->month - 1]);
+	} else { /* CALENDAR_FORMAT_MONTH_YEAR */
+		length = snprintf(buffer, bufferlen, "%s %lu", months[date->month - 1], date->year);
+	}
+
+	if(length >= bufferlen) {
+		length = 0;
+	}
+#endif
+	size_t const offset = (bufferlen - length) / 2;
+
+	memmove(buffer + offset, buffer, length);
 	memset(buffer, ' ', offset);
-	length = strlen(strncpy(buffer + offset, ftime, bufferlen - offset));
 	memset(buffer + offset + length, ' ', bufferlen - length - offset);
 }
 
@@ -134,6 +149,7 @@ cal_fillftime(char *buffer,
  */
 static char *
 cal_fillweek(char *buffer) {
+#ifdef CAL_LOCALIZED
 	struct tm t = { .tm_wday = 0 };
 
 	for(; t.tm_wday < 6; t.tm_wday += 1, buffer += 3) {
@@ -144,6 +160,9 @@ cal_fillweek(char *buffer) {
 	buffer += 2;
 
 	return buffer;
+#else
+	return stpncpy(buffer, "Su Mo Tu We Th Fr Sa", 20);
+#endif
 }
 
 /**
@@ -155,11 +174,14 @@ cal_fillweek(char *buffer) {
 static inline void
 cal_sday(char *buffer,
 	cal_t day) {
-	const char decimal = day / 10 + '0';
-	const char digit = day % 10 + '0';
 
-	buffer[0] = decimal == '0' ? ' ' : decimal;
-	buffer[1] = digit;
+	if(day >= 10) {
+		buffer[0] = day / 10 + '0';
+		buffer[1] = day % 10 + '0';
+	} else {
+		buffer[0] = ' ';
+		buffer[1] = day + '0';
+	}
 }
 
 /**
@@ -173,7 +195,7 @@ cal_sday(char *buffer,
  */
 static cal_t
 cal_filldays(char *buffer,
-	const struct cal_moninfo *minfo,
+	struct cal_moninfo const *minfo,
 	cal_t step) {
 	char * const end = buffer + 20;
 
@@ -181,7 +203,7 @@ cal_filldays(char *buffer,
 	up to needed + spaces between each current
 	and following day writes */
 	if(step == 1) {
-		const size_t blanks = minfo->fwday * 3;
+		size_t const blanks = minfo->fwday * 3;
 		memset(buffer, ' ', blanks);
 		buffer += blanks;
 
@@ -213,14 +235,14 @@ cal_filldays(char *buffer,
  * @param date Pointer to the date described, date.day unused
  */
 static void
-cal_print_month(const struct cal_date *date) {
-	const size_t bufferlen = 21;
+cal_print_month(struct cal_date const *date) {
+	size_t const bufferlen = 21;
 	char * const buffer = alloca(bufferlen);
 	buffer[bufferlen - 1] = '\0';
 
 	/* Print name of month + year */
 	cal_fillftime(buffer, bufferlen - 1,
-		CalendarFormatMonthYear, date);
+		CALENDAR_FORMAT_MONTH_YEAR, date);
 	puts(buffer);
 
 	/* Print week description */
@@ -243,8 +265,8 @@ cal_print_month(const struct cal_date *date) {
  * @param date Pointer to the date described, date.day and date.month unused
  */
 static void
-cal_print_year(const struct cal_date *date) {
-	const size_t bufferlen = 65;
+cal_print_year(struct cal_date const *date) {
+	size_t const bufferlen = 65;
 	char * const buffer = alloca(bufferlen);
 	char * const weeks = alloca(bufferlen);
 	buffer[bufferlen - 1] = '\0';
@@ -258,12 +280,11 @@ cal_print_year(const struct cal_date *date) {
 	memcpy(w + 24, weeks, 20);
 
 	/* Print the year at the top */
-	cal_fillftime(buffer, bufferlen - 1, CalendarFormatYear, date);
+	cal_fillftime(buffer, bufferlen - 1, CALENDAR_FORMAT_YEAR, date);
 	puts(buffer);
 
 	/* Iterate through the year */
 	struct cal_date d = {
-		.day = 1,
 		.month = 0,
 		.year = date->year
 	};
@@ -276,7 +297,7 @@ cal_print_year(const struct cal_date *date) {
 			d.month += 1;
 			cal_moninfo_init(minfos + i, &d);
 			cal_fillftime(buffer + 22 * i, 20,
-				CalendarFormatMonth, &d);
+				CALENDAR_FORMAT_MONTH, &d);
 		}
 		puts(buffer);
 
@@ -297,7 +318,7 @@ cal_print_year(const struct cal_date *date) {
 }
 
 static void
-cal_usage(const char *calname) {
+cal_usage(char const *calname) {
 	fprintf(stderr, "usage: %s [[month] year]\n", calname);
 	exit(1);
 }
@@ -305,7 +326,7 @@ cal_usage(const char *calname) {
 int
 main(int argc,
 	char **argv) {
-	struct cal_date date = { 1 };
+	struct cal_date date;
 
 	/* Argument parsing */
 	if(argc > 3) {
@@ -328,10 +349,9 @@ main(int argc,
 			cal_usage(*argv);
 		}
 	} else {
-		const time_t timestamp = time(NULL);
-		const struct tm *timeinfo = localtime(&timestamp);
+		time_t const timestamp = time(NULL);
+		struct tm const *timeinfo = localtime(&timestamp);
 
-		date.day = timeinfo->tm_mday;
 		date.month = timeinfo->tm_mon + 1;
 		date.year = timeinfo->tm_year + 1900;
 	}
