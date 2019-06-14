@@ -45,8 +45,7 @@ main(int argc,
 	size_t linecap = 0;
 
 	if(argc > 1) {
-		char **argpos = argv + 1;
-		char ** const argend = argv + argc;
+		char **argpos = argv + 1, ** const argend = argv + argc;
 		int retval = 0;
 
 		while(argpos != argend) {

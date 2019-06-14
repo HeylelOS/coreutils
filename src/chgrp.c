@@ -1,19 +1,16 @@
 #define _XOPEN_SOURCE 500
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
-#include <ftw.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <pwd.h>
 #include <grp.h>
+#include <ftw.h>
+#include <err.h>
 
 #include "core_fs.h"
 
-static const char *chgrpname;
-
+static int chgrpretval;
 static const char *newgroup;
 static gid_t newgid;
 
@@ -21,17 +18,12 @@ static int
 chgrp_change_follow(const char *path) {
 	gid_t group = newgid;
 	struct stat st;
+	int retval;
 
-	if(stat(path, &st) == -1) {
-		fprintf(stderr, "error: %s stat %s: %s\n",
-			chgrpname, path, strerror(errno));
-		exit(1);
-	}
-
-	int retval = chown(path, st.st_uid, group);
-	if(retval == -1) {
-		fprintf(stderr, "error: %s chown %s: %s\n",
-			chgrpname, path, strerror(errno));
+	if((retval = stat(path, &st)) == -1) {
+		warn("stat %s", path);
+	} else if((retval = chown(path, st.st_uid, group)) == -1) {
+		warn("chown %s", path);
 	}
 
 	return retval;
@@ -41,17 +33,12 @@ static int
 chgrp_change_nofollow(const char *path) {
 	gid_t group = newgid;
 	struct stat st;
+	int retval;
 
-	if(lstat(path, &st) == -1) {
-		fprintf(stderr, "error: %s lstat %s: %s\n",
-			chgrpname, path, strerror(errno));
-		exit(1);
-	}
-
-	int retval = lchown(path, st.st_uid, group);
-	if(retval == -1) {
-		fprintf(stderr, "error: %s lchown %s: %s\n",
-			chgrpname, path, strerror(errno));
+	if((retval = lstat(path, &st)) == -1) {
+		warn("lstat %s", path);
+	} else if((retval = lchown(path, st.st_uid, group)) == -1) {
+		warn("lchown %s", path);
 	}
 
 	return retval;
@@ -68,14 +55,19 @@ chgrp_ftw_follow(const char *path,
 	case FTW_D:
 	case FTW_SL:
 	case FTW_NS:
-		return chgrp_change_follow(path);
+		if(chgrp_change_follow(path) == -1) {
+			chgrpretval = 1;
+		}
+		break;
 	case FTW_DNR:
-		fprintf(stderr, "error: %s: Unable to read directory %s\n",
-			chgrpname, path);
-		/* falltrough */
+		warnx("Unable to read directory %s", path);
+		chgrpretval = 1;
+		break;
 	default:
-		return -1;
+		break;
 	}
+
+	return 0;
 }
 
 static int
@@ -89,14 +81,19 @@ chgrp_ftw_nofollow(const char *path,
 	case FTW_D:
 	case FTW_SL:
 	case FTW_NS:
-		return chgrp_change_nofollow(path);
+		if(chgrp_change_nofollow(path) == -1) {
+			chgrpretval = 1;
+		}
+		break;
 	case FTW_DNR:
-		fprintf(stderr, "error: %s: Unable to read directory %s\n",
-			chgrpname, path);
-		/* falltrough */
+		warnx("Unable to read directory %s", path);
+		chgrpretval = 1;
+		break;
 	default:
-		return -1;
+		break;
 	}
+
+	return 0;
 }
 
 static int
@@ -140,7 +137,7 @@ chgrp_change_recursive_follow_head(const char *path) {
 }
 
 static void
-chgrp_usage(void) {
+chgrp_usage(const char *chgrpname) {
 	fprintf(stderr, "usage: %s [-h] owner[:group] file...\n"
 		"       %s -R [-H|-L|-P] owner[:group] file...\n",
 		chgrpname, chgrpname);
@@ -160,17 +157,13 @@ chgrp_assign(const char *newgrp) {
 			unsigned long lgid = strtoul(newgroup, &end, 10);
 
 			if(*newgroup == '\0' || *end != '\0') {
-				fprintf(stderr, "error: %s: Unable to infer gid from '%s'\n",
-					chgrpname, newgroup);
-				exit(1);
+				errx(1, "Unable to infer gid from '%s'", newgroup);
 			} else {
 				/* Same as uid */
 				newgid = lgid;
 			}
 		} else {
-			fprintf(stderr, "error: %s getgrnam: %s\n",
-				chgrpname, strerror(errno));
-			exit(1);
+			err(1, "getgrnam");
 		}
 	} else {
 		newgid = grp->gr_gid;
@@ -181,12 +174,10 @@ int
 main(int argc,
 	char **argv) {
 	int (*chgrp_change)(const char *) = chgrp_change_follow;
-	char ** const argend = argv + argc;
-	char **argpos;
-	chgrpname = *argv;
+	char ** const argend = argv + argc, **argpos;
 
 	if(argc == 1) {
-		chgrp_usage();
+		chgrp_usage(*argv);
 	}
 
 	int c;
@@ -197,41 +188,44 @@ main(int argc,
 		while((c = getopt(argc, argv, "HLP")) != -1) {
 			switch(c) {
 			case 'H':
-				chgrp_change = chgrp_change_recursive_follow_head; break;
+				chgrp_change = chgrp_change_recursive_follow_head;
+				break;
 			case 'L':
-				chgrp_change = chgrp_change_recursive_follow; break;
+				chgrp_change = chgrp_change_recursive_follow;
+				break;
 			case 'P':
-				chgrp_change = chgrp_change_recursive_nofollow; break;
+				chgrp_change = chgrp_change_recursive_nofollow;
+				break;
 			default:
-				chgrp_usage();
+				chgrp_usage(*argv);
+				/* no return */
 			}
 		}
 	} else while((c = getopt(argc, argv, "h")) != -1) {
 		if(c == 'h') {
 			chgrp_change = chgrp_change_nofollow;
 		} else {
-			chgrp_usage();
+			chgrp_usage(*argv);
 		}
 	}
 
 	argpos = argv + optind;
 	if(argpos + 2 >= argend) {
-		chgrp_usage();
+		chgrp_usage(*argv);
 	}
 
 	chgrp_assign(*argpos);
 	argpos += 1;
 
-	int retval = 0;
 	while(argpos != argend) {
 
 		if(chgrp_change(*argpos) == -1) {
-			retval = 1;
+			chgrpretval = 1;
 		}
 
 		argpos += 1;
 	}
 
-	return retval;
+	return chgrpretval;
 }
 

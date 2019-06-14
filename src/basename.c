@@ -6,22 +6,22 @@
 int
 main(int argc,
 	char **argv) {
-	char const *begin, *end;
 
 	if(argc < 2 || argc > 3) {
 		fprintf(stderr, "usage: %s string [suffix]\n", *argv);
 		return 1;
 	}
 
+	const char *begin, *end;
 	fs_basename(argv[1], &begin, &end);
 
-	size_t basenamelen = end - begin;
-	char *basename = strndup(begin, basenamelen);
+	const size_t basenamelen = end - begin;
+	char * const basename = (char *)begin;
 
 	if(argc == 3) {
-		char *suffix = argv[2];
-		size_t suffixlen = strlen(suffix);
-		char *basesuffix = basename + basenamelen - suffixlen;
+		char * const suffix = argv[2];
+		const size_t suffixlen = strlen(suffix);
+		char * const basesuffix = basename + basenamelen - suffixlen;
 
 		if(basesuffix > basename) {
 			if(strcmp(basesuffix, suffix) == 0) {
@@ -31,10 +31,6 @@ main(int argc,
 	}
 
 	puts(basename);
-
-#ifdef FULL_CLEANUP
-	free(basename);
-#endif
 
 	return 0;
 }

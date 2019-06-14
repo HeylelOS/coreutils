@@ -1,10 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
-#include <errno.h>
 #include <alloca.h>
+#include <err.h>
 
 #include "core_io.h"
 
@@ -46,8 +45,6 @@
 
 	4. The bit sequence is complemented and the result is the CRC.
 */
-
-static const char *cksumname;
 
 /*
 	The following table is generated from the polynomial seen above
@@ -178,8 +175,7 @@ cksum(int fd, const char *path) {
 			printf("%u %lu\n", crc32, size);
 		}
 	} else {
-		fprintf(stderr, "error: %s read %s: %s\n",
-			cksumname, path, strerror(errno));
+		warn("read %s", path);
 	}
 
 	return readval;
@@ -189,9 +185,7 @@ int
 main(int argc,
 	char **argv) {
 	int retval = 0;
-	char **argpos = argv + 1;
-	char ** const argend = argv + argc;
-	cksumname = *argv;
+	char **argpos = argv + 1, ** const argend = argv + argc;
 
 	if(argpos == argend) {
 
@@ -214,8 +208,7 @@ main(int argc,
 
 					close(fd);
 				} else {
-					fprintf(stderr, "error: %s open: %s\n",
-						*argpos, strerror(errno));
+					warn("open %s", *argpos);
 					retval = 1;
 				}
 			}

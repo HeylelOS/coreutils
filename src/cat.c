@@ -1,37 +1,21 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include <errno.h>
+#include <err.h>
 
 #include "core_io.h"
 
-static const char *catname;
-static size_t outsize;
-
-static void
-cat_error(const char *errormsg,
-	const char *filename) {
-
-	fprintf(stderr, "error: %s: %s %s: %s\n",
-		catname, errormsg, filename, strerror(errno));
-
-	exit(1);
-}
-
-static void
-cat_flush(int fd, const char *filename) {
+static int
+cat_flush(int fd, const char *filename, size_t outsize) {
 
 	switch(io_flush_to(fd, STDOUT_FILENO, outsize)) {
 	case -1:
-		cat_error("read", filename);
-		/* noreturn */
+		warn("read %s", filename);
+		return -1;
 	case 1:
-		cat_error("write", filename);
-		/* noreturn */
+		warn("write %s", filename);
+		return -1;
 	default:
-		break;
+		return 0;
 	}
 }
 
@@ -45,30 +29,38 @@ cat_flush(int fd, const char *filename) {
 int
 main(int argc,
 	char **argv) {
-	char ** const argend = argv + argc;
-	char **argpos;
+	const size_t outsize = io_blocksize(STDOUT_FILENO);
+	char ** argpos, ** const argend = argv + argc;
+	int retval = 0;
 	char c;
-	catname = *argv;
-	outsize = io_blocksize(STDOUT_FILENO);
 
-	while((c = getopt(argc, argv, "u")) != -1);
-	/* There is already no delay between read and writes in our case */
+	while((c = getopt(argc, argv, "u")) != -1) {
+		/* There is already no delay between read and writes in our case */
+		if(c == '?') {
+			return 1;
+		}
+	}
 	argpos = argv + optind;
 
 	if(argpos == argend) {
-		cat_flush(STDIN_FILENO, "-");
+		cat_flush(STDIN_FILENO, "-", outsize);
 	} else {
 		while(argpos != argend) {
 			if(strcmp(*argpos, "-") == 0) {
-				cat_flush(STDIN_FILENO, "-");
+				if(cat_flush(STDIN_FILENO, "-", outsize) == -1) {
+					retval = 1;
+				}
 			} else {
 				int fd = open(*argpos, O_RDONLY);
 
 				if(fd != -1) {
-					cat_flush(fd, *argpos);
+					if(cat_flush(fd, *argpos, outsize) == -1) {
+						retval = 1;
+					}
 					close(fd);
 				} else {
-					cat_error("open", *argpos);
+					warn("open %s", *argpos);
+					retval = 1;
 				}
 			}
 
@@ -76,6 +68,6 @@ main(int argc,
 		}
 	}
 
-	return 0;
+	return retval;
 }
 
