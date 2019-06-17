@@ -8,6 +8,7 @@
 #include <ftw.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <errno.h>
 #include <err.h>
 
@@ -180,8 +181,52 @@ cp_regfile(const char *sourcefile, const char *destfile,
 
 static int
 cp_copy(const char *sourcefile, const struct stat *sourcestatp,
-	char *destfile, const struct stat *deststatp,
-	bool traversal) {
+	const char *destfile, const struct stat *deststatp);
+static char cpdirsource[PATH_MAX];
+static char cpdirdest[PATH_MAX];
+
+static int
+cp_directory(const char *sourcefile, const char *destfile) {
+	DIR *dirp = opendir(sourcefile);
+	struct dirent *entry;
+	int retval = 0;
+
+	if(dirp != NULL) {
+		while((entry = readdir(dirp)) != NULL) {
+			if(strcmp(".", entry->d_name) != 0
+				&& strcmp("..", entry->d_name) != 0) {
+				struct stat sourcestat;
+
+				if(snprintf(cpdirsource, sizeof(cpdirsource), "%s/%s", sourcefile, entry->d_name) >= sizeof(cpdirsource)
+					|| snprintf(cpdirdest, sizeof(cpdirdest), "%s/%s", destfile, entry->d_name) >= sizeof(cpdirdest)) {
+					warnx("Filename too long in %s", sourcefile);
+					retval++;
+					continue;
+				}
+
+				if(CP_FOLLOWS_TRAVERSAL() ? stat(cpdirsource, &sourcestat) == 0
+					: lstat(cpdirsource, &sourcestat) == 0) {
+					struct stat deststat;
+
+					retval += cp_copy(cpdirsource, &sourcestat,
+						cpdirdest, stat(cpdirdest, &deststat) == 0 ? &deststat : NULL);
+				} else {
+					warn("Unable to stat tree file %s", cpdirsource);
+					retval++;
+				}
+			}
+		}
+	} else {
+		warn("Unable to open directory %s", sourcefile);
+		retval = 1;
+	}
+
+	return retval;
+}
+
+static int
+cp_copy(const char *sourcefile, const struct stat *sourcestatp,
+	const char *destfile, const struct stat *deststatp) {
 	int retval = 0;
 
 	if(deststatp != NULL
@@ -204,14 +249,11 @@ cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 			}
 			break;
 		case S_IFLNK:
-			if(traversal ? !CP_FOLLOWS_TRAVERSAL() : !CP_FOLLOWS_SOURCES()) {
-				if(cp_symlink_cow(sourcefile, destfile) == -1
-					&& symlink(sourcefile, destfile) == -1) {
-					retval = 1;
-				}
-				break;
+			if(cp_symlink_cow(sourcefile, destfile) == -1
+				&& symlink(sourcefile, destfile) == -1) {
+				retval = 1;
 			}
-			/* fallthrough */
+			break;
 		case S_IFREG:
 			if(cp_regfile_cow(sourcefile, destfile, sourcestatp) == -1
 				&& cp_regfile(sourcefile, destfile, sourcestatp) == -1) {
@@ -219,14 +261,16 @@ cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 			}
 			break;
 		case S_IFDIR:
-			if(!CP_IS_RECURSIVE()) {
-				warnx("%s copy of directory authorized only with -R specified", sourcefile);
-				retval = 1;
-			} else {
-				if(mkdir(destfile, sourcestatp->st_mode) == -1) {
+			if(CP_IS_RECURSIVE()) {
+				if(mkdir(destfile, sourcestatp->st_mode) == 0) {
+					retval += cp_directory(sourcefile, destfile);
+				} else {
 					warn("Unable to create directory %s", destfile);
 					retval = 1;
 				}
+			} else {
+				warnx("Directory copy only with -R: %s to %s", sourcefile, destfile);
+				retval = 1;
 			}
 			break;
 		default:
@@ -237,6 +281,22 @@ cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 	}
 
 	return retval;
+}
+
+static int
+cp_copy_argument(const char *sourcefile, char *destfile,
+	struct stat *deststatp) {
+	struct stat sourcestat;
+
+	if(CP_FOLLOWS_SOURCES() ? stat(sourcefile, &sourcestat) == 0
+		: lstat(sourcefile, &sourcestat) == 0) {
+		return cp_copy(sourcefile, &sourcestat, destfile, deststatp);
+	} else {
+		warn("Unable to stat source file %s", sourcefile);
+		return 1;
+	}
+
+	return 0;
 }
 
 static const char *
@@ -257,21 +317,6 @@ cp_basename(const char *path) {
 	}
 
 	return basename;
-}
-
-static int
-cp_copy_argument(const char *sourcefile, char *destfile,
-	struct stat *deststatp) {
-	struct stat sourcestat;
-
-	if(stat(sourcefile, &sourcestat) == 0) {
-		return cp_copy(sourcefile, &sourcestat, destfile, deststatp, false);
-	} else {
-		warn("Unable to stat source file %s", sourcefile);
-		return 1;
-	}
-
-	return 0;
 }
 
 static int
