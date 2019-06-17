@@ -179,26 +179,26 @@ cp_regfile(const char *sourcefile, const char *destfile,
 }
 
 static int
-cp_copy(const char *sourcefile, const struct stat *sourcefilestatp,
-	char *destfile, const struct stat *destfilestatp,
+cp_copy(const char *sourcefile, const struct stat *sourcestatp,
+	char *destfile, const struct stat *deststatp,
 	bool traversal) {
 	int retval = 0;
 
-	if(destfilestatp != NULL
-		&& sourcefilestatp->st_ino == destfilestatp->st_ino) {
+	if(deststatp != NULL
+		&& sourcestatp->st_ino == deststatp->st_ino) {
 		warnx("%s and %s are identical (not copied)", sourcefile, destfile);
 		retval = 1;
 	} else {
-		switch(sourcefilestatp->st_mode & S_IFMT) {
+		switch(sourcestatp->st_mode & S_IFMT) {
 		case S_IFBLK:
 		case S_IFCHR:
-			if(mknod(destfile, sourcefilestatp->st_mode, sourcefilestatp->st_dev) == -1) {
+			if(mknod(destfile, sourcestatp->st_mode, sourcestatp->st_dev) == -1) {
 				warn("%s unable to copy to %s as device", sourcefile, destfile);
 				retval = 1;
 			}
 			break;
 		case S_IFIFO:
-			if(mkfifo(destfile, sourcefilestatp->st_mode) == -1) {
+			if(mkfifo(destfile, sourcestatp->st_mode) == -1) {
 				warn("%s unable to copy to %s as fifo", sourcefile, destfile);
 				retval = 1;
 			}
@@ -213,8 +213,8 @@ cp_copy(const char *sourcefile, const struct stat *sourcefilestatp,
 			}
 			/* fallthrough */
 		case S_IFREG:
-			if(cp_regfile_cow(sourcefile, destfile, sourcefilestatp) == -1
-				&& cp_regfile(sourcefile, destfile, sourcefilestatp) == -1) {
+			if(cp_regfile_cow(sourcefile, destfile, sourcestatp) == -1
+				&& cp_regfile(sourcefile, destfile, sourcestatp) == -1) {
 				retval = 1;
 			}
 			break;
@@ -223,7 +223,7 @@ cp_copy(const char *sourcefile, const struct stat *sourcefilestatp,
 				warnx("%s copy of directory authorized only with -R specified", sourcefile);
 				retval = 1;
 			} else {
-				if(mkdir(destfile, sourcefilestatp->st_mode) == -1) {
+				if(mkdir(destfile, sourcestatp->st_mode) == -1) {
 					warn("Unable to create directory %s", destfile);
 					retval = 1;
 				}
@@ -259,37 +259,23 @@ cp_basename(const char *path) {
 	return basename;
 }
 
-/*
 static int
-cp_dest_from(const char *source) {
-	int retval = 0;
+cp_copy_argument(const char *sourcefile, char *destfile,
+	struct stat *deststatp) {
+	struct stat sourcestat;
 
-	if(*source != '\0') {
-		strncpy(cptargetend, source,
-			destfile + sizeof(destfile) - cptargetend);
-
-		if(destfile[sizeof(destfile) - 1] != '\0') {
-			warnx("Destination file path too long");
-			retval = -1;
-		}
+	if(stat(sourcefile, &sourcestat) == 0) {
+		return cp_copy(sourcefile, &sourcestat, destfile, deststatp, false);
 	} else {
-		warnx("Empty source path invalid");
-		retval = -1;
+		warn("Unable to stat source file %s", sourcefile);
+		return 1;
 	}
 
-	return retval;
-}
-*/
-
-static int
-cp_synopsis_1_2(int argc,
-	char **argv) {
-
-	return 1;
+	return 0;
 }
 
 static int
-cp_synopsis_3(int argc,
+cp(int argc,
 	char **argv) {
 	char target[PATH_MAX];
 	char *targetend = stpncpy(target, argv[argc - 1], sizeof(target));
@@ -303,29 +289,22 @@ cp_synopsis_3(int argc,
 		errx(1, "Target path too long");
 	}
 
-	/* Standards specifies append ONE slash if one not already here */
-	if(targetend[-1] != '/') {
-		*targetend = '/';
-		targetend += 1;
-	}
-
 	if(stat(target, &targetstat) == 0) {
-		if(S_ISDIR(targetstat.st_mode)) {
+		if(S_ISDIR(targetstat.st_mode)) { /* Synopsis 2 & 3 */
 			const size_t targetendcapacity = target + sizeof(target) - targetend;
 			char ** const sourcefilesend = argv + argc - 1;
+
+			/* Standards specifies append ONE slash if one not already here */
+			if(targetend[-1] != '/') {
+				*targetend = '/';
+				targetend += 1;
+			}
 
 			while(sourcefiles != sourcefilesend) {
 				const char *sourcefile = *sourcefiles;
 
 				if(stpncpy(targetend, cp_basename(sourcefile), targetendcapacity) < target + sizeof(target)) {
-					struct stat sourcefilestat;
-
-					if(stat(sourcefile, &sourcefilestat) == 0) {
-						retval += cp_copy(sourcefile, &sourcefilestat, target, NULL, false);
-					} else {
-						warn("Unable to stat source file %s", sourcefile);
-						retval++;
-					}
+					retval += cp_copy_argument(sourcefile, target, NULL);
 				} else {
 					warnx("Destination path too long for source file %s", sourcefile);
 					retval++;
@@ -333,29 +312,21 @@ cp_synopsis_3(int argc,
 
 				sourcefiles++;
 			}
+		} else if(argc - optind == 2) { /* Synopsis 1 */
+			retval = cp_copy_argument(*sourcefiles, target, &targetstat);
 		} else {
-			warnx("%s exists and is not a directory", target);
+			warnx("%s is not a directory", target);
 			cp_usage(*argv);
 		}
 	} else if(errno == ENOENT) {
-		if(argc - optind == 2) {
-			struct stat sourcefilestat;
-
-			if(stat(*sourcefiles, &sourcefilestat) == 0) {
-				if(S_ISDIR(sourcefilestat.st_mode)) {
-					retval = cp_copy(*sourcefiles, &sourcefilestat, target, NULL, false);
-				} else {
-					errx(1, "%s is not a directory", *sourcefiles);
-				}
-			} else {
-				err(1, "Unable to stat %s", *sourcefiles);
-			}
+		if(argc - optind == 2) { /* Synopsis 1 */
+			retval = cp_copy_argument(*sourcefiles, target, NULL);
 		} else {
 			warnx("%s doesn't exist and multiple source files were provided", target);
 			cp_usage(*argv);
 		}
 	} else {
-		err(1, "Unable to resolve %s", target);
+		err(1, "Unable to stat target %s", target);
 	}
 
 	return 0;
@@ -368,11 +339,7 @@ main(int argc,
 	cp_parse_args(argc, argv);
 
 	if(argc - optind >= 2) {
-		if(CP_IS_RECURSIVE()) {
-			retval = cp_synopsis_3(argc, argv);
-		} else {
-			retval = cp_synopsis_1_2(argc, argv);
-		}
+		retval = cp(argc, argv);
 	} else {
 		warnx("Not enough arguments");
 		cp_usage(*argv);
