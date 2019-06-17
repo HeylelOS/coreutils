@@ -26,7 +26,7 @@ do not hesitate to contact me.
 - [x] chmod
 - [x] chown
 - [x] cksum
-- [ ] cmp
+- [x] cmp
 - [ ] comm
 - [ ] command
 - [ ] cp

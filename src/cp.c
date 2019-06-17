@@ -13,6 +13,9 @@
 /* Copy-on-write support */
 #ifdef __APPLE__
 #include <sys/clonefile.h>
+#elif defined(__linux__)
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 #endif
 
 #include "core_io.h"
@@ -147,9 +150,34 @@ cp_symlink_cow(const char *sourcefile) {
 }
 
 static int
-cp_regfile_cow(const char *sourcefile) {
+cp_regfile_cow(const char *sourcefile,
+	const struct stat *sourcefilestatp) {
 #ifdef __APPLE__
 	return clonefile(sourcefile, cpdestfile, 0);
+#elif defined(__linux__)
+	int fdsrc = open(sourcefile, O_RDONLY);
+	int retval = 0;
+
+	if(fdsrc >= 0) {
+		int fddest = open(cpdestfile,
+			O_WRONLY | O_TRUNC | O_CREAT,
+			sourcefilestatp->st_mode);
+
+		if(fddest >= 0) {
+
+			retval = ioctl(fddest, FICLONE, fdsrc);
+
+			close(fddest);
+		} else {
+			retval = -1;
+		}
+
+		close(fdsrc);
+	} else {
+		retval = -1;
+	}
+
+	return retval;
 #else
 	return -1;
 #endif
@@ -161,12 +189,12 @@ cp_regfile(const char *sourcefile,
 	int fdsrc = open(sourcefile, O_RDONLY);
 	int retval = 0;
 
-	if(fdsrc > 0) {
+	if(fdsrc >= 0) {
 		int fddest = open(cpdestfile,
 			O_WRONLY | O_TRUNC | O_CREAT,
 			sourcefilestatp->st_mode);
 
-		if(fddest > 0) {
+		if(fddest >= 0) {
 			switch(io_flush_to(fdsrc, fddest,
 				sourcefilestatp->st_blksize)) {
 			case -1:
@@ -243,7 +271,7 @@ cp_copy(const char *sourcefile,
 			}
 			/* fallthrough */
 		case S_IFREG:
-			if(cp_regfile_cow(sourcefile) == -1
+			if(cp_regfile_cow(sourcefile, sourcefilestatp) == -1
 				&& cp_regfile(sourcefile, sourcefilestatp) == -1) {
 				retval = 1;
 			}
