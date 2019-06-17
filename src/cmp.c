@@ -9,22 +9,23 @@
 
 #include "core_io.h"
 
+#define CMP_MAX(a, b) ((a) > (b) ? (a) : (b))
+
+static enum {
+	CMP_FORMAT_DEFAULT,
+	CMP_FORMAT_OCTAL,
+	CMP_FORMAT_NONE
+} cmpformat;
+
 static int
 cmp_stat(const char *path,
 	struct stat *st) {
-	int retval;
 
 	if(strcmp(path, "-") == 0) {
-		retval = fstat(STDIN_FILENO, st);
+		return fstat(STDIN_FILENO, st);
 	} else {
-		retval = stat(path, st);
+		return stat(path, st);
 	}
-
-	if(retval == -1) {
-		warn("stat %s", path);
-	}
-
-	return retval;
 }
 
 static int
@@ -37,7 +38,28 @@ cmp_fd(const char *path) {
 	}
 }
 
-static void
+static size_t
+cmp_compare(const char *buffer1, const char *buffer2,
+	size_t size, size_t *count, size_t *line) {
+	const char * const begin = buffer1,
+		* const end = begin + size;
+
+	while(buffer1 < end
+		&& *buffer1 == *buffer2) {
+		if(*buffer1 == '\n') {
+			++*line;
+		}
+
+		buffer1++;
+		buffer2++;
+	}
+
+	*count += buffer1 - begin;
+
+	return end - buffer1;
+}
+
+static int
 cmp(const char *file1,
 	size_t blksize1,
 	const char *file2,
@@ -45,7 +67,8 @@ cmp(const char *file1,
 	/* Fetch fds and bigger block size */
 	const int fd1 = cmp_fd(file1);
 	const int fd2 = cmp_fd(file2);
-	const size_t blksize = blksize1 > blksize2 ? blksize1 : blksize2;
+	const size_t blksize = CMP_MAX(blksize1, blksize2);
+	int retval = 0;
 
 	/* If one of the file is invalid, error */
 	if(fd1 == -1) {
@@ -56,18 +79,57 @@ cmp(const char *file1,
 		char * const buffer1 = alloca(blksize);
 		char * const buffer2 = alloca(blksize);
 		ssize_t readval1, readval2;
+		size_t bytenumber = 1, linenumber = 1,
+			size, missing;
 
 		while((readval1 = io_read_all(fd1, buffer1, blksize)) >= 0
 			&& (readval2 = io_read_all(fd2, buffer2, blksize)) >= 0
-			&& readval1 == readval2
-			&& memcmp(buffer1, buffer2, blksize - readval1) == 0) {
+			&& readval1 == readval2 && readval1 != blksize
+			&& (missing = cmp_compare(buffer1, buffer2,
+				(size = blksize - readval1), &bytenumber, &linenumber)) == 0) {
 		}
 
 		if(readval1 < 0) {
 			err(2, "read %s", file1);
 		} else if(readval2 < 0) {
 			err(2, "read %s", file2);
-		} else if(readval1 != readval2) {
+		}
+
+		if(readval1 != readval2) {
+			const char *shortestfile;
+			size_t readval;
+
+			if(readval1 > readval2) {
+				shortestfile = file1;
+				readval = readval1;
+			} else {
+				shortestfile = file2;
+				readval = readval2;
+			}
+
+			if((missing = cmp_compare(buffer1, buffer2,
+				(size = blksize - readval), &bytenumber, &linenumber)) == 0
+				&& cmpformat != CMP_FORMAT_NONE) {
+				fprintf(stderr, "cmp: EOF on %s\n", shortestfile);
+			}
+
+			retval = -1;
+		}
+
+		if(missing != 0) {
+
+			switch(cmpformat) {
+			case CMP_FORMAT_DEFAULT:
+				printf("%s %s differ: char %lu, line %lu\n", file1, file2, bytenumber, linenumber);
+				break;
+			case CMP_FORMAT_OCTAL:
+				printf("%lu %o %o\n", bytenumber, buffer1[size - missing], buffer2[size - missing]);
+				break;
+			default: /* CMP_FORMAT_NONE */
+				break;
+			}
+
+			retval = -1;
 		}
 	}
 
@@ -75,6 +137,8 @@ cmp(const char *file1,
 	close(fd1);
 	close(fd2);
 #endif
+
+	return retval;
 }
 
 static void
@@ -93,8 +157,10 @@ main(int argc,
 	while((c = getopt(argc, argv, "ls")) != -1) {
 		switch(c) {
 		case 'l':
+			cmpformat = CMP_FORMAT_OCTAL;
 			break;
 		case 's':
+			cmpformat = CMP_FORMAT_NONE;
 			break;
 		default:
 			cmp_usage(*argv);
@@ -123,8 +189,10 @@ main(int argc,
 		if(statval1 == -1 || statval2 == -1
 			|| st1.st_ino != st2.st_ino) {
 
-			cmp(file1, st1.st_blksize,
-				file2, st2.st_blksize);
+			if(cmp(file1, st1.st_blksize,
+				file2, st2.st_blksize) == -1) {
+				return 1;
+			}
 		}
 	}
 
