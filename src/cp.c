@@ -35,6 +35,9 @@ static struct {
 #define CP_FOLLOWS_SOURCES()   (cpargs.nofollowsources == 0)
 #define CP_FOLLOWS_TRAVERSAL() (cpargs.followtraversal != 0)
 
+/* Standards specifies append ONE slash if one not already here on paths */
+#define CP_ENSURE_SLASH(ptr) if((ptr)[-1] != '/') { *(ptr) = '/'; (ptr)++; }
+
 static void
 cp_usage(const char *cpname) {
 	fprintf(stderr, "usage: %s [-Pfip] source_file target_file\n"
@@ -99,6 +102,9 @@ static int
 cp_symlink_cow(const char *sourcefile, const char *destfile) {
 #ifdef __APPLE__
 	return clonefile(sourcefile, destfile, CLONE_NOFOLLOW);
+#elif defined(__linux__)
+	/* No known linux API to COW symlinks */
+	return -1;
 #else
 	return -1;
 #endif
@@ -182,44 +188,62 @@ cp_regfile(const char *sourcefile, const char *destfile,
 static int
 cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 	const char *destfile, const struct stat *deststatp);
-static char cpdirsource[PATH_MAX];
-static char cpdirdest[PATH_MAX];
 
 static int
 cp_directory(const char *sourcefile, const char *destfile) {
-	DIR *dirp = opendir(sourcefile);
-	struct dirent *entry;
+	size_t sourcelen = strlen(sourcefile), destlen = strlen(destfile);
+	char *source = malloc(PATH_MAX), *dest = malloc(PATH_MAX);
 	int retval = 0;
 
-	if(dirp != NULL) {
-		while((entry = readdir(dirp)) != NULL) {
-			if(strcmp(".", entry->d_name) != 0
-				&& strcmp("..", entry->d_name) != 0) {
-				struct stat sourcestat;
+	if(source != NULL && dest != NULL) {
+		char *sourceend = stpncpy(source, sourcefile, sourcelen),
+			*destend = stpncpy(dest, destfile, destlen);
+		DIR *dirp;
 
-				if(snprintf(cpdirsource, sizeof(cpdirsource), "%s/%s", sourcefile, entry->d_name) >= sizeof(cpdirsource)
-					|| snprintf(cpdirdest, sizeof(cpdirdest), "%s/%s", destfile, entry->d_name) >= sizeof(cpdirdest)) {
-					warnx("Filename too long in %s", sourcefile);
-					retval++;
-					continue;
-				}
+		CP_ENSURE_SLASH(sourceend);
+		CP_ENSURE_SLASH(destend);
 
-				if(CP_FOLLOWS_TRAVERSAL() ? stat(cpdirsource, &sourcestat) == 0
-					: lstat(cpdirsource, &sourcestat) == 0) {
-					struct stat deststat;
+		if((dirp = opendir(sourcefile)) != NULL) {
+			struct dirent *entry;
 
-					retval += cp_copy(cpdirsource, &sourcestat,
-						cpdirdest, stat(cpdirdest, &deststat) == 0 ? &deststat : NULL);
-				} else {
-					warn("Unable to stat tree file %s", cpdirsource);
-					retval++;
+			while((entry = readdir(dirp)) != NULL) {
+				if(strcmp(".", entry->d_name) != 0
+					&& strcmp("..", entry->d_name) != 0) {
+					struct stat sourcestat;
+					const size_t length = strlen(entry->d_name);
+
+					if(length >= source + PATH_MAX - sourceend
+						|| length >= dest + PATH_MAX - destend) {
+						warnx("Filename too long in %s", sourcefile);
+						retval++;
+						continue;
+					}
+
+					strncpy(sourceend, entry->d_name, length + 1);
+					strncpy(destend, entry->d_name, length + 1);
+
+					if(CP_FOLLOWS_TRAVERSAL() ? stat(source, &sourcestat) == 0
+						: lstat(source, &sourcestat) == 0) {
+						struct stat deststat;
+
+						retval += cp_copy(source, &sourcestat,
+							dest, stat(dest, &deststat) == 0 ? &deststat : NULL);
+					} else {
+						warn("Unable to stat tree file %s", source);
+						retval++;
+					}
 				}
 			}
+
+			closedir(dirp);
+		} else {
+			warn("Unable to copy directory %s", sourcefile);
+			retval = 1;
 		}
-	} else {
-		warn("Unable to open directory %s", sourcefile);
-		retval = 1;
 	}
+
+	free(source);
+	free(dest);
 
 	return retval;
 }
@@ -269,7 +293,7 @@ cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 					retval = 1;
 				}
 			} else {
-				warnx("Directory copy only with -R: %s to %s", sourcefile, destfile);
+				warnx("Missing -R to copy directories: %s to %s", sourcefile, destfile);
 				retval = 1;
 			}
 			break;
@@ -339,11 +363,7 @@ cp(int argc,
 			const size_t targetendcapacity = target + sizeof(target) - targetend;
 			char ** const sourcefilesend = argv + argc - 1;
 
-			/* Standards specifies append ONE slash if one not already here */
-			if(targetend[-1] != '/') {
-				*targetend = '/';
-				targetend += 1;
-			}
+			CP_ENSURE_SLASH(targetend);
 
 			while(sourcefiles != sourcefilesend) {
 				const char *sourcefile = *sourcefiles;
