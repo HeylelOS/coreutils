@@ -29,7 +29,7 @@ do not hesitate to contact me.
 - [x] cmp
 - [ ] comm
 - [ ] command
-- [ ] cp
+- [x] cp
 - [ ] csplit
 - [ ] cut
 - [ ] date

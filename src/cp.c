@@ -1,14 +1,10 @@
-#define _XOPEN_SOURCE 700
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <ftw.h>
-#include <limits.h>
+#include <libgen.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <err.h>
 
@@ -30,13 +26,18 @@ static struct {
 	unsigned nofollowsources : 1;
 	unsigned followtraversal : 1;
 } cpargs;
+static mode_t cpumask;
 
 #define CP_IS_RECURSIVE()      (cpargs.recursive == 1)
+#define CP_FORCES()            (cpargs.force == 1)
+#define CP_INTERACTS()         (cpargs.interactive == 1)
+#define CP_DUPLICATES()        (cpargs.duplicate == 1)
 #define CP_FOLLOWS_SOURCES()   (cpargs.nofollowsources == 0)
 #define CP_FOLLOWS_TRAVERSAL() (cpargs.followtraversal != 0)
 
 /* Standards specifies append ONE slash if one not already here on paths */
 #define CP_ENSURE_SLASH(ptr) if((ptr)[-1] != '/') { *(ptr) = '/'; (ptr)++; }
+#define CP_UMASK(mode) ((mode) & ~cpumask)
 
 static void
 cp_usage(const char *cpname) {
@@ -96,6 +97,13 @@ cp_parse_args(int argc,
 	if(optind + 2 > argc) {
 		cp_usage(*argv);
 	}
+
+	/* The standard asks specific handling (see when creating a directory) for
+	permissions so we manually handle copies with the CP_UMASK macro which applies our umask */
+	cpumask = umask(0);
+	if(CP_DUPLICATES()) {
+		cpumask = 0;
+	}
 }
 
 static int
@@ -147,15 +155,51 @@ cp_regfile_cow(const char *sourcefile, const char *destfile,
 static int
 cp_regfile(const char *sourcefile, const char *destfile,
 	const struct stat *statp) {
-	int fdsrc = open(sourcefile, O_RDONLY);
+	int fddest;
 	int retval = 0;
 
-	if(fdsrc >= 0) {
-		int fddest = open(destfile,
+	if(access(destfile, F_OK) == 0) {
+		if(CP_INTERACTS()) {
+			char *line = NULL;
+			size_t capacity = 0;
+			char c;
+
+			fprintf(stderr, "Do you want to overwrite '%s' with '%s'? ", destfile, sourcefile);
+			if(getline(&line, &capacity, stdin) == -1) {
+				warn("Unable to read interactive prompt");
+				retval = 1;
+			} else {
+				c = *line;
+			}
+
+			free(line);
+			if(retval == 1
+				|| (c != 'y' && c != 'Y')) {
+				return retval;
+			}
+		}
+
+		fddest = open(destfile, O_WRONLY | O_TRUNC);
+
+		if(fddest == -1 && CP_FORCES()) {
+			if(unlink(destfile) == 0) {
+				fddest = open(destfile,
+					O_WRONLY | O_TRUNC | O_CREAT,
+					statp->st_mode);
+			} else {
+				warn("Unable to unlink %s", destfile);
+			}
+		}
+	} else {
+		fddest = open(destfile,
 			O_WRONLY | O_TRUNC | O_CREAT,
 			statp->st_mode);
+	}
 
-		if(fddest >= 0) {
+	if(fddest >= 0) {
+		int fdsrc = open(sourcefile, O_RDONLY);
+
+		if(fdsrc >= 0) {
 			switch(io_flush_to(fdsrc, fddest,
 				statp->st_blksize)) {
 			case -1:
@@ -170,15 +214,15 @@ cp_regfile(const char *sourcefile, const char *destfile,
 				break;
 			}
 
-			close(fddest);
+			close(fdsrc);
 		} else {
-			warn("Couldn't open destination file %s", destfile);
+			warn("Couldn't open source file %s", sourcefile);
 			retval = -1;
 		}
 
-		close(fdsrc);
+		close(fddest);
 	} else {
-		warn("Couldn't open source file %s", sourcefile);
+		warn("Couldn't open destination file %s", destfile);
 		retval = -1;
 	}
 
@@ -251,60 +295,86 @@ cp_directory(const char *sourcefile, const char *destfile) {
 static int
 cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 	const char *destfile, const struct stat *deststatp) {
-	int retval = 0;
+	int error = 0, treeerrors = 0;
 
 	if(deststatp != NULL
 		&& sourcestatp->st_ino == deststatp->st_ino) {
 		warnx("%s and %s are identical (not copied)", sourcefile, destfile);
-		retval = 1;
+		error = 1;
 	} else {
 		switch(sourcestatp->st_mode & S_IFMT) {
 		case S_IFBLK:
 		case S_IFCHR:
-			if(mknod(destfile, sourcestatp->st_mode, sourcestatp->st_dev) == -1) {
+			if(mknod(destfile, CP_UMASK(sourcestatp->st_mode & 0777), sourcestatp->st_dev) == -1) {
 				warn("%s unable to copy to %s as device", sourcefile, destfile);
-				retval = 1;
+				error = 1;
 			}
 			break;
 		case S_IFIFO:
-			if(mkfifo(destfile, sourcestatp->st_mode) == -1) {
+			if(mkfifo(destfile, CP_UMASK(sourcestatp->st_mode & 0777)) == -1) {
 				warn("%s unable to copy to %s as fifo", sourcefile, destfile);
-				retval = 1;
+				error = 1;
 			}
 			break;
 		case S_IFLNK:
 			if(cp_symlink_cow(sourcefile, destfile) == -1
 				&& symlink(sourcefile, destfile) == -1) {
-				retval = 1;
+				error = 1;
 			}
 			break;
 		case S_IFREG:
 			if(cp_regfile_cow(sourcefile, destfile, sourcestatp) == -1
 				&& cp_regfile(sourcefile, destfile, sourcestatp) == -1) {
-				retval = 1;
+				error = 1;
 			}
 			break;
 		case S_IFDIR:
 			if(CP_IS_RECURSIVE()) {
-				if(mkdir(destfile, sourcestatp->st_mode) == 0) {
-					retval += cp_directory(sourcefile, destfile);
+				if(mkdir(destfile, CP_UMASK(sourcestatp->st_mode & 0777) | S_IRWXU) == 0) {
+					treeerrors = cp_directory(sourcefile, destfile);
+					if(chmod(destfile, CP_UMASK(sourcestatp->st_mode & 0777)) == -1) {
+						warn("Unable to keep %s permissions' for %s", sourcefile, destfile);
+						error = 1;
+					}
 				} else {
 					warn("Unable to create directory %s", destfile);
-					retval = 1;
+					error = 1;
 				}
 			} else {
 				warnx("Missing -R to copy directories: %s to %s", sourcefile, destfile);
-				retval = 1;
+				error = 1;
 			}
 			break;
 		default:
 			warnx("%s has unsupported file type", sourcefile);
-			retval = 1;
+			error = 1;
 			break;
 		}
 	}
 
-	return retval;
+	if(CP_DUPLICATES() && error == 0) {
+		struct timespec times[2] = { sourcestatp->st_atim, sourcestatp->st_mtim };
+
+		if(utimensat(AT_FDCWD, destfile, times,
+			(sourcestatp->st_mode & S_IFMT) == S_IFLNK ? AT_SYMLINK_NOFOLLOW : 0) == -1) {
+			warn("Unable to duplicate time properties of %s for %s", sourcefile, destfile);
+			error = 1;
+		}
+
+		int destumask = 06777;
+		if(chown(destfile, sourcestatp->st_uid, sourcestatp->st_gid) == -1) {
+			warn("Unable to duplicate owners of %s for %s", sourcefile, destfile);
+			destumask = 0777;
+			error = 1;
+		}
+
+		if(chmod(destfile, CP_UMASK(sourcestatp->st_mode & destumask)) == -1) {
+			warn("Unable to duplicate permissions of %s for %s", sourcefile, destfile);
+			error = 1;
+		}
+	}
+
+	return error + treeerrors;
 }
 
 static int
@@ -321,26 +391,6 @@ cp_copy_argument(const char *sourcefile, char *destfile,
 	}
 
 	return 0;
-}
-
-static const char *
-cp_basename(const char *path) {
-	const char *basename = path;
-
-	if(*basename != '\0') {
-		const char *current = basename;
-
-		while(*current != '\0') {
-			if(*current == '/'
-				&& current[1] != '\0'
-				&& current[1] != '/') {
-				basename = current + 1;
-			}
-			current += 1;
-		}
-	}
-
-	return basename;
 }
 
 static int
@@ -366,9 +416,9 @@ cp(int argc,
 			CP_ENSURE_SLASH(targetend);
 
 			while(sourcefiles != sourcefilesend) {
-				const char *sourcefile = *sourcefiles;
+				char *sourcefile = *sourcefiles;
 
-				if(stpncpy(targetend, cp_basename(sourcefile), targetendcapacity) < target + sizeof(target)) {
+				if(stpncpy(targetend, basename(sourcefile), targetendcapacity) < target + sizeof(target)) {
 					retval += cp_copy_argument(sourcefile, target, NULL);
 				} else {
 					warnx("Destination path too long for source file %s", sourcefile);

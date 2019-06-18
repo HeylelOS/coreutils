@@ -19,47 +19,6 @@
 #define S_IRWXA (S_IRWXU | S_IRWXG | S_IRWXO)
 #define S_ISALL (S_ISUID | S_ISGID | S_ISVTX)
 
-/**
- * Finds the beginning and the end of the basename
- * @param path the path in which we get the basename, non-null
- * @param begin pointer where the beginning of the basename is returned
- * @param end pointer where the end of the basename is returned
- * @return 0 on success, -1 on error
- */
-static ssize_t HEYLEL_UNUSED
-fs_basename(const char *path,
-	const char **pbegin,
-	const char **pend) {
-
-	if(*path != '\0') {
-		const char *end = path + strlen(path);
-
-		while(end != path
-			&& end[-1] == '/') {
-			end -= 1;
-		}
-
-		const char *begin = end;
-
-		while(begin != path
-			&& begin[-1] != '/') {
-			begin -= 1;
-		}
-
-		if(end == begin) {
-			/* Only '/' on path case */
-			end += 1;
-		}
-
-		*pbegin = begin;
-		*pend = end;
-
-		return 0;
-	}
-
-	return -1;
-}
-
 #define isperm(c) ((c) == 'r'\
 				|| (c) == 'w'\
 				|| (c) == 'x'\

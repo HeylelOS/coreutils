@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static int
 asa_map(char **linep, size_t *linecapp, FILE *filep) {
@@ -44,8 +45,10 @@ main(int argc,
 	char *line = NULL;
 	size_t linecap = 0;
 
-	if(argc > 1) {
-		char **argpos = argv + 1, ** const argend = argv + argc;
+	while(getopt(argc, argv, "") != -1);
+
+	if(argc - optind > 1) {
+		char **argpos = argv + optind, ** const argend = argv + argc;
 		int retval = 0;
 
 		while(argpos != argend) {

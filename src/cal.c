@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <time.h>
 #include <alloca.h>
@@ -39,10 +40,10 @@ cal_leap_year(const struct cal_date *date) {
 		if((date->year % 4 == 0
 			&& date->year % 100 != 0)
 			|| date->year % 400 == 0) {
-			leap += 1;
+			leap++;
 		}
 	} else if(date->year % 4 == 0) {
-		leap += 1;
+		leap++;
 	}
 
 	return leap;
@@ -152,7 +153,7 @@ cal_fillweek(char *buffer) {
 #ifdef CAL_LOCALIZED
 	struct tm t = { .tm_wday = 0 };
 
-	for(; t.tm_wday < 6; t.tm_wday += 1, buffer += 3) {
+	for(; t.tm_wday < 6; t.tm_wday++, buffer += 3) {
 		strftime(buffer, 2, "%a", &t);
 		buffer[2] = ' ';
 	}
@@ -217,7 +218,7 @@ cal_filldays(char *buffer,
 	/* Then we write each day until its the end
 	of the buffer or the end of the month */
 	for(; step <= minfo->lday && buffer < end;
-		step += 1, buffer += 3) {
+		step++, buffer += 3) {
 
 		cal_sday(buffer, step);
 	}
@@ -254,7 +255,7 @@ cal_print_month(const struct cal_date *date) {
 	cal_t step = 1;
 	cal_moninfo_init(&minfo, date);
 
-	for(int i = 0; i < 6; i += 1) {
+	for(int i = 0; i < 6; i++) {
 		step = cal_filldays(buffer, &minfo, step);
 		puts(buffer);
 	}
@@ -293,8 +294,8 @@ cal_print_year(const struct cal_date *date) {
 		struct cal_moninfo minfos[3];
 
 		/* Print months' names */
-		for(int i = 0; i < 3; i += 1) {
-			d.month += 1;
+		for(int i = 0; i < 3; i++) {
+			d.month++;
 			cal_moninfo_init(minfos + i, &d);
 			cal_fillftime(buffer + 22 * i, 20,
 				CALENDAR_FORMAT_MONTH, &d);
@@ -307,7 +308,7 @@ cal_print_year(const struct cal_date *date) {
 		/* Print each month */
 		cal_t steps[3] = { 1, 1, 1 };
 
-		for(int i = 0; i < 6; i += 1) {
+		for(int i = 0; i < 6; i++) {
 			steps[0] = cal_filldays(buffer, minfos, steps[0]);
 			steps[1] = cal_filldays(buffer + 22, minfos + 1, steps[1]);
 			steps[2] = cal_filldays(buffer + 44, minfos + 2, steps[2]);
@@ -326,41 +327,43 @@ cal_usage(const char *calname) {
 int
 main(int argc,
 	char **argv) {
-	struct cal_date date;
 
-	/* Argument parsing */
-	if(argc > 3) {
-		cal_usage(*argv);
-	} else if(argc != 1) {
-		char **argpos = argv + 1;
+	while(getopt(argc, argv, "") != -1);
 
-		if(argc == 3) {
-			date.month = strtoul(*argpos, NULL, 10);
+	if(argc - optind < 3) {
+		void (*cal_print)(const struct cal_date *) = cal_print_month;
+		struct cal_date date;
 
-			if(date.month < 1 || date.month > 12) {
-				cal_usage(*argv);
+		if(argc != optind) {
+			char **argpos = argv + optind;
+
+			if(argc - optind == 2) {
+				date.month = strtoul(*argpos, NULL, 10);
+
+				if(date.month < 1 || date.month > 12) {
+					cal_usage(*argv);
+				}
+
+				argpos++;
+			} else {
+				cal_print = cal_print_year;
 			}
 
-			argpos += 1;
+			date.year = strtoul(*argpos, NULL, 10);
+			if(date.year < 1 || date.year > 9999) {
+				cal_usage(*argv);
+			}
+		} else {
+			const time_t timestamp = time(NULL);
+			const struct tm *timeinfo = localtime(&timestamp);
+
+			date.month = timeinfo->tm_mon + 1;
+			date.year = timeinfo->tm_year + 1900;
 		}
 
-		date.year = strtoul(*argpos, NULL, 10);
-		if(date.year < 1 || date.year > 9999) {
-			cal_usage(*argv);
-		}
+		cal_print(&date);
 	} else {
-		const time_t timestamp = time(NULL);
-		const struct tm *timeinfo = localtime(&timestamp);
-
-		date.month = timeinfo->tm_mon + 1;
-		date.year = timeinfo->tm_year + 1900;
-	}
-
-	/* Whether we print a full year calendar, or only the month */
-	if(argc != 2) {
-		cal_print_month(&date);
-	} else {
-		cal_print_year(&date);
+		cal_usage(*argv);
 	}
 
 	return 0;

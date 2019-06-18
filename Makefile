@@ -12,6 +12,7 @@ CHOWN=build/bin/chown
 CKSUM=build/bin/cksum
 CMP=build/bin/cmp
 CP=build/bin/cp
+DIRNAME=build/bin/dirname
 ECHO=build/bin/echo
 UNIQ=build/bin/uniq
 UNLINK=build/bin/unlink
@@ -57,6 +58,9 @@ $(CMP): src/cmp.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(CP): src/cp.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(DIRNAME): src/dirname.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(ECHO): src/echo.c

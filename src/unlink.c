@@ -1,20 +1,22 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <err.h>
 
 int
 main(int argc,
 	char **argv) {
 
-	if(argc != 2) {
+	while(getopt(argc, argv, "") != -1);
+
+	if(argc - optind == 1) {
+		if(unlink(argv[optind]) == -1) {
+			err(1, "unlink %s", argv[optind]);
+		}
+
+		return 0;
+	} else {
 		fprintf(stderr, "usage: %s file\n", *argv);
 		return 1;
 	}
-
-	if(unlink(argv[1]) == -1) {
-		perror(*argv);
-		return 1;
-	}
-
-	return 0;
 }
 

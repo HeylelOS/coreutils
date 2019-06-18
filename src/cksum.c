@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <alloca.h>
 #include <err.h>
@@ -185,14 +186,12 @@ int
 main(int argc,
 	char **argv) {
 	int retval = 0;
-	char **argpos = argv + 1, ** const argend = argv + argc;
 
-	if(argpos == argend) {
+	while(getopt(argc, argv, "") != -1);
 
-		if(cksum(STDIN_FILENO, NULL) == -1) {
-			retval = 1;
-		}
-	} else {
+	if(argc != optind) {
+		char **argpos = argv + optind, ** const argend = argv + argc;
+
 		while(argpos != argend) {
 			if(strcmp(*argpos, "-") == 0) {
 				if(cksum(STDIN_FILENO, *argpos) == -1) {
@@ -214,6 +213,10 @@ main(int argc,
 			}
 
 			argpos += 1;
+		}
+	} else {
+		if(cksum(STDIN_FILENO, NULL) == -1) {
+			retval = 1;
 		}
 	}
 
