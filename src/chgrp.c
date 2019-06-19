@@ -1,231 +1,218 @@
-#define _XOPEN_SOURCE 500
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <errno.h>
 #include <grp.h>
-#include <ftw.h>
+#include <errno.h>
 #include <err.h>
 
 #include "core_fs.h"
 
-static int chgrpretval;
-static const char *newgroup;
-static gid_t newgid;
-
 static int
-chgrp_change_follow(const char *path) {
-	gid_t group = newgid;
-	struct stat st;
+chgrp_change(const char *file, const struct stat *statp, gid_t gid) {
 	int retval;
 
-	if((retval = stat(path, &st)) == -1) {
-		warn("stat %s", path);
-	} else if((retval = chown(path, st.st_uid, group)) == -1) {
-		warn("chown %s", path);
-	}
-
-	return retval;
-}
-
-static int
-chgrp_change_nofollow(const char *path) {
-	gid_t group = newgid;
-	struct stat st;
-	int retval;
-
-	if((retval = lstat(path, &st)) == -1) {
-		warn("lstat %s", path);
-	} else if((retval = lchown(path, st.st_uid, group)) == -1) {
-		warn("lchown %s", path);
-	}
-
-	return retval;
-}
-
-static int
-chgrp_ftw_follow(const char *path,
-	const struct stat *st,
-	int flag,
-	struct FTW *ftw) {
-
-	switch(flag) {
-	case FTW_F:
-	case FTW_D:
-	case FTW_SL:
-	case FTW_NS:
-		if(chgrp_change_follow(path) == -1) {
-			chgrpretval = 1;
+	if(S_ISLNK(statp->st_mode)) {
+		if((retval = lchown(file, statp->st_uid, gid)) == -1) {
+			warn("lchown %s", file);
 		}
-		break;
-	case FTW_DNR:
-		warnx("Unable to read directory %s", path);
-		chgrpretval = 1;
-		break;
-	default:
-		break;
-	}
-
-	return 0;
-}
-
-static int
-chgrp_ftw_nofollow(const char *path,
-	const struct stat *st,
-	int flag,
-	struct FTW *ftw) {
-
-	switch(flag) {
-	case FTW_F:
-	case FTW_D:
-	case FTW_SL:
-	case FTW_NS:
-		if(chgrp_change_nofollow(path) == -1) {
-			chgrpretval = 1;
-		}
-		break;
-	case FTW_DNR:
-		warnx("Unable to read directory %s", path);
-		chgrpretval = 1;
-		break;
-	default:
-		break;
-	}
-
-	return 0;
-}
-
-static int
-chgrp_ftw_follow_head(const char *path,
-	const struct stat *st,
-	int flag,
-	struct FTW *ftw) {
-
-	if(ftw->level == 0) {
-		return chgrp_ftw_follow(path, st, flag, ftw);
 	} else {
-		return chgrp_ftw_nofollow(path, st, flag, ftw);
+		if((retval = chown(file, statp->st_uid, gid)) == -1) {
+			warn("chown %s", file);
+		} else if((retval = chmod(file, statp->st_mode & (S_ISVTX | S_IRWXA))) == -1) {
+			warn("chmod %s", file);
+		}
 	}
+
+	return retval;
 }
 
 static int
-chgrp_change_recursive_follow(const char *path) {
+chgrp_change_follow(const char *file, gid_t gid, bool follows) {
+	struct stat st;
+	int retval;
 
-	return nftw(path,
-		chgrp_ftw_follow,
-		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
-		0);
+	if(follows ? (retval = -stat(file, &st)) == 0
+		: (retval = -lstat(file, &st)) == 0) {
+		retval = -chgrp_change(file, &st, gid);
+	} else {
+		warn("stat %s", file);
+	}
+
+	return retval;
 }
 
 static int
-chgrp_change_recursive_nofollow(const char *path) {
+chgrp_change_hierarchy(const char *file, gid_t gid,
+	bool follows, bool traversal) {
+	struct stat st;
+	int retval;
 
-	return nftw(path,
-		chgrp_ftw_nofollow,
-		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
-		FTW_PHYS);
+	if((retval = -stat(file, &st)) == 0) {
+		if(!follows) {
+			struct stat lst;
+
+			if((retval = -lstat(file, &lst)) == 0) {
+				retval = -chgrp_change(file, &lst, gid);
+			} else {
+				warn("lstat %s", file);
+			}
+		} else {
+			retval = -chgrp_change(file, &st, gid);
+		}
+
+		if(S_ISDIR(st.st_mode)) {
+			struct fs_recursion recursion;
+			char path[PATH_MAX], * const pathend = path + sizeof(path);
+
+			if(fs_recursion_init(&recursion,
+				path, pathend, stpncpy(path, file, sizeof(path))) == 0) {
+
+				while(!fs_recursion_is_empty(&recursion)) {
+					struct dirent *entry;
+
+					while((entry = readdir(fs_recursion_peak(&recursion))) != NULL) {
+						if(fs_recursion_is_valid(entry->d_name)) {
+							if(entry->d_type == DT_DIR) {
+								if(fs_recursion_push(&recursion, entry->d_name) == 0) {
+									retval += -chgrp_change_follow(path, gid, traversal);
+								} else {
+									warnx("Unable to explore directory %s", path);
+									retval++;
+								}
+							} else {
+								char *nameend = fs_recursion_path_end(&recursion);
+
+								if(stpncpy(nameend, entry->d_name, pathend - nameend) < pathend) {
+									retval += -chgrp_change_follow(path, gid, traversal);
+								} else {
+									warnx("Unable to chgrp %s: Path too long", path);
+									retval++;
+								}
+							}
+						}
+					}
+
+					fs_recursion_pop(&recursion);
+				}
+
+				fs_recursion_deinit(&recursion);
+			} else {
+				warnx("Unable to explore hierarchy of %s", file);
+			}
+		}
+	} else {
+		warn("stat %s", file);
+	}
+
+	return retval;
 }
 
-static int
-chgrp_change_recursive_follow_head(const char *path) {
-
-	return nftw(path,
-		chgrp_ftw_follow_head,
-		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT),
-		FTW_PHYS);
-}
-
-static void
-chgrp_usage(const char *chgrpname) {
-	fprintf(stderr, "usage: %s [-h] owner[:group] file...\n"
-		"       %s -R [-H|-L|-P] owner[:group] file...\n",
-		chgrpname, chgrpname);
-	exit(1);
-}
-
-static void
-chgrp_assign(const char *newgrp) {
+static gid_t
+chgrp_gid(const char *group) {
 	struct group *grp;
-	newgroup = newgrp;
+	gid_t gid;
 
 	errno = 0;
-	if((grp = getgrnam(newgroup)) == NULL) {
+	if((grp = getgrnam(group)) == NULL) {
 		if(errno == 0) {
 			/* No entry found, treat as numeric gid */
 			char *end;
-			unsigned long lgid = strtoul(newgroup, &end, 10);
+			unsigned long lgid = strtoul(group, &end, 10);
 
-			if(*newgroup == '\0' || *end != '\0') {
-				errx(1, "Unable to infer gid from '%s'", newgroup);
+			if(*group == '\0' || *end != '\0') {
+				errx(1, "Unable to infer gid from '%s'", group);
 			} else {
-				/* Same as uid */
-				newgid = lgid;
+				gid = lgid;
 			}
 		} else {
 			err(1, "getgrnam");
 		}
 	} else {
-		newgid = grp->gr_gid;
+		gid = grp->gr_gid;
 	}
+
+	return gid;
+}
+
+static void
+chgrp_usage(const char *chgrpname) {
+	fprintf(stderr, "usage: %s [-h] group file...\n"
+		"       %s -R [-H|-L|-P] group file...\n",
+		chgrpname, chgrpname);
+	exit(1);
 }
 
 int
 main(int argc,
 	char **argv) {
-	int (*chgrp_change)(const char *) = chgrp_change_follow;
-	char ** const argend = argv + argc, **argpos;
-
-	if(argc == 1) {
-		chgrp_usage(*argv);
-	}
-
+	struct {
+		unsigned recursive : 1;
+		unsigned follows : 1;
+		unsigned followstraversal : 1;
+	} args = { 0, 1, 0 };
+	int retval = 0;
 	int c;
-	if(strcmp(argv[1], "-R") == 0) {
-		chgrp_change = chgrp_change_recursive_nofollow;
-		argpos = argv + (optind = 2);
 
-		while((c = getopt(argc, argv, "HLP")) != -1) {
-			switch(c) {
-			case 'H':
-				chgrp_change = chgrp_change_recursive_follow_head;
+	while((c = getopt(argc, argv, "hRHLP")) != -1) {
+		switch(c) {
+		case 'h':
+			args.follows = 0;
+			break;
+		case 'R':
+			args.recursive = 1;
+			break;
+		case 'H':
+			if(args.recursive == 1) {
+				args.follows = 1;
+				args.followstraversal = 0;
 				break;
-			case 'L':
-				chgrp_change = chgrp_change_recursive_follow;
-				break;
-			case 'P':
-				chgrp_change = chgrp_change_recursive_nofollow;
-				break;
-			default:
-				chgrp_usage(*argv);
-				/* no return */
+			} else {
+				warnx("-H specified before -R");
 			}
-		}
-	} else while((c = getopt(argc, argv, "h")) != -1) {
-		if(c == 'h') {
-			chgrp_change = chgrp_change_nofollow;
-		} else {
+			/* fallthrough */
+		case 'L':
+			if(args.recursive == 1) {
+				args.follows = 1;
+				args.followstraversal = 1;
+				break;
+			} else {
+				warnx("-L specified before -R");
+			}
+			/* fallthrough */
+		case 'P':
+			if(args.recursive == 1) {
+				args.follows = 0;
+				args.followstraversal = 0;
+				break;
+			} else {
+				warnx("-P specified before -R");
+			}
+			/* fallthrough */
+		default:
 			chgrp_usage(*argv);
+			break;
 		}
 	}
 
-	argpos = argv + optind;
-	if(argpos + 2 >= argend) {
+	if(argc - optind > 1) {
+		char **argpos = argv + optind + 1, ** const argend = argv + argc;
+		gid_t gid = chgrp_gid(argv[optind]);
+		umask(0); /* Clear the set-user id and set-group id bits */
+
+		while(argpos != argend) {
+			const char *file = *argpos;
+
+			if(args.recursive == 1) {
+				retval += chgrp_change_hierarchy(file, gid, args.follows == 1, args.followstraversal == 1);
+			} else {
+				retval += chgrp_change_follow(file, gid, args.follows == 1);
+			}
+
+			argpos++;
+		}
+	} else {
 		chgrp_usage(*argv);
 	}
 
-	chgrp_assign(*argpos);
-	argpos += 1;
-
-	while(argpos != argend) {
-
-		if(chgrp_change(*argpos) == -1) {
-			chgrpretval = 1;
-		}
-
-		argpos += 1;
-	}
-
-	return chgrpretval;
+	return retval;
 }
 

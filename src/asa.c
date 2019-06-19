@@ -47,7 +47,7 @@ main(int argc,
 
 	while(getopt(argc, argv, "") != -1);
 
-	if(argc - optind > 1) {
+	if(argc != optind) {
 		char **argpos = argv + optind, ** const argend = argv + argc;
 		int retval = 0;
 

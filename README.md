@@ -28,7 +28,6 @@ do not hesitate to contact me.
 - [x] cksum
 - [x] cmp
 - [ ] comm
-- [ ] command
 - [x] cp
 - [ ] csplit
 - [ ] cut
@@ -36,12 +35,12 @@ do not hesitate to contact me.
 - [ ] dd
 - [ ] df
 - [ ] diff
-- [ ] dirname
+- [x] dirname
 - [ ] du
 - [x] echo + echo-xsi (an XSI compliant echo, both behaviors are different, cf. Standard)
 - [ ] expand
 - [ ] expr
-- [ ] false
+- [x] false
 - [ ] file
 - [ ] find
 - [ ] fold
@@ -92,7 +91,7 @@ do not hesitate to contact me.
 - [ ] touch
 - [ ] tput
 - [ ] tr
-- [ ] true
+- [x] true
 - [ ] tsort
 - [ ] tty
 - [ ] ulimit

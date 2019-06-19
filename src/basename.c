@@ -9,21 +9,22 @@ main(int argc,
 
 	while(getopt(argc, argv, "") != -1);
 
-	if(argc - optind < 3) {
-		char * const dir = dirname(argv[optind]);
+	if(argc != optind
+		&& argc - optind < 3) {
+		char * const base = basename(argv[optind]);
 
 		if(argc - optind == 2) {
 			char * const suffix = argv[optind + 1];
-			char * const dirsuffix = dir + strlen(dir) - strlen(suffix);
+			char * const basesuffix = base + strlen(base) - strlen(suffix);
 
-			if(dirsuffix > dir) {
-				if(strcmp(dirsuffix, suffix) == 0) {
-					*dirsuffix = '\0';
+			if(basesuffix > base) {
+				if(strcmp(basesuffix, suffix) == 0) {
+					*basesuffix = '\0';
 				}
 			}
 		}
 
-		puts(dir);
+		puts(base);
 
 		return 0;
 	} else {

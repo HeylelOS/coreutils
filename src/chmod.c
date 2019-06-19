@@ -1,80 +1,90 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <ftw.h>
+#include <sys/stat.h>
 #include <err.h>
 
 #include "core_fs.h"
 
-static int chmodretval;
-static const char *modeexp;
-static mode_t cmask;
-
 static int
-chmod_apply(const char *path,
-	const struct stat *st) {
-	mode_t mode = st->st_mode & (S_ISALL | S_IRWXA);
-	int isdir = (S_IFMT & mode) == S_IFDIR ? 1 : 0;
-	const char *last = fs_parsemode(modeexp,
-		&mode, cmask, isdir);
-	int retval = 0;
+chmod_change(const char *file, const struct stat *statp,
+	const char *modeexp, mode_t cmask) {
+	mode_t mode = statp->st_mode & (S_ISALL | S_IRWXA);
+	const char *modeexpend = fs_parsemode(modeexp, &mode,
+		cmask, S_ISDIR(statp->st_mode));
+	int retval = -1;
 
-	if(*last != '\0') {
-		warnx("Unable to parse mode '%s', stopped at '%c'", modeexp, *last);
-		retval = -1;
-	} else if((retval = chmod(path, mode)) == -1) {
-		warn("chmod %s", path);
+	if(*modeexpend == '\0') {
+		if((retval = chmod(file, mode)) == -1) {
+			warn("chmod %s", file);
+		}
+	} else {
+		warnx("Unable to parse mode '%s', stopped at '%c'", modeexp, *modeexpend);
 	}
 
 	return retval;
 }
 
 static int
-chmod_change_default(const char *path) {
+chmod_change_argument(const char *file,
+	const char *modeexp, mode_t cmask,
+	bool recursive) {
 	struct stat st;
+	int retval;
 
-	if(stat(path, &st) == -1) {
-		warn("stat %s", path);
-		return -1;
-	}
+	if((retval = -stat(file, &st)) == 0) {
+		if((retval = -chmod_change(file, &st, modeexp, cmask)) == 0
+			&& S_ISDIR(st.st_mode) && recursive) {
+			struct fs_recursion recursion;
+			char path[PATH_MAX], * const pathend = path + sizeof(path);
 
-	return chmod_apply(path, &st);
-}
+			if(fs_recursion_init(&recursion,
+				path, pathend, stpncpy(path, file, sizeof(path))) == 0) {
 
-static int
-chmod_ftw(const char *path,
-	const struct stat *st,
-	int flag) {
+				while(!fs_recursion_is_empty(&recursion)) {
+					struct dirent *entry;
 
-	switch(flag) {
-	case FTW_F:
-	case FTW_D:
-	case FTW_SL:
-		if(chmod_apply(path, st) == -1) {
-			chmodretval = 1;
+					while((entry = readdir(fs_recursion_peak(&recursion))) != NULL) {
+						if(fs_recursion_is_valid(entry->d_name)) {
+
+							if(stat(path, &st) == 0) {
+								if(S_ISDIR(st.st_mode)) {
+									if(fs_recursion_push(&recursion, entry->d_name) == 0) {
+										retval += -chmod_change(path, &st, modeexp, cmask);
+									} else {
+										warnx("Unable to explore directory %s", path);
+										retval++;
+									}
+								} else {
+									char *nameend = fs_recursion_path_end(&recursion);
+
+									if(stpncpy(nameend, entry->d_name, pathend - nameend) < pathend) {
+										retval += -chmod_change(path, &st, modeexp, cmask);
+									} else {
+										warnx("Unable to chmod %s: Path too long", path);
+										retval++;
+									}
+								}
+							} else {
+								warn("stat %s", file);
+								retval++;
+							}
+						}
+					}
+
+					fs_recursion_pop(&recursion);
+				}
+
+				fs_recursion_deinit(&recursion);
+			} else {
+				warnx("Unable to explore hierarchy of %s", file);
+				retval++;
+			}
 		}
-		break;
-	case FTW_NS:
-		warn("stat %s", path);
-		chmodretval = 1;
-		break;
-	case FTW_DNR:
-		warnx("Unable to read directory %s", path);
-		chmodretval = 1;
-		break;
-	default:
-		break;
+	} else {
+		warn("stat %s", file);
 	}
 
-	return 0;
-}
-
-static int
-chmod_change_recursive(const char *path) {
-
-	return ftw(path, chmod_ftw,
-		fs_fdlimit(HEYLEL_FDLIMIT_DEFAULT));
+	return retval;
 }
 
 static void
@@ -87,35 +97,35 @@ chmod_usage(const char *chmodname) {
 int
 main(int argc,
 	char **argv) {
-	int (*chmod_change)(const char *) = chmod_change_default;
-	char **argpos, ** const argend = argv + argc;
-
+	bool recursive = false;
+	int retval = 0;
 	int c;
+
 	while((c = getopt(argc, argv, "R")) != -1) {
 		if(c == 'R') {
-			chmod_change = chmod_change_recursive;
+			recursive = true;
 		} else {
+			warnx("Unknown option -%c", c);
 			chmod_usage(*argv);
 		}
 	}
 
-	argpos = argv + optind;
-	if(argpos + 2 >= argend) {
+	if(argc - optind > 1) {
+		char **argpos = argv + optind + 1, ** const argend = argv + argc;
+		const char *modeexp = argv[optind];
+		mode_t cmask = umask(0);
+
+		while(argpos != argend) {
+			const char *file = *argpos;
+
+			retval += chmod_change_argument(file, modeexp, cmask, recursive);
+
+			argpos++;
+		}
+	} else {
 		chmod_usage(*argv);
 	}
 
-	cmask = umask(S_IRWXA);
-	modeexp = *argpos;
-	argpos += 1;
-
-	while(argpos != argend) {
-		if(chmod_change(*argpos) == -1) {
-			chmodretval = 1;
-		}
-
-		argpos += 1;
-	}
-
-	return chmodretval;
+	return retval;
 }
 

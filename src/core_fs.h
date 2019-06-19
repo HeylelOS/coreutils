@@ -3,11 +3,142 @@
 #define HEYLEL_CORE_FS_H
 
 #include <sys/stat.h>
-#include <sys/resource.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <dirent.h>
 
 #ifndef HEYLEL_UNUSED
 #define HEYLEL_UNUSED __attribute__((unused))
 #endif
+
+struct fs_recursion {
+	DIR **directories;
+	size_t capacity;
+	size_t count;
+
+	char *buffer;
+	const char *bufferend;
+	char *current;
+};
+
+static int
+fs_recursion_init(struct fs_recursion *recursion,
+	char *buffer, const char *bufferend, char *pathend) {
+
+	if(pathend < bufferend) {
+		recursion->capacity = 16;
+		recursion->directories = malloc(sizeof(*recursion->directories) * recursion->capacity);
+
+		if(recursion->directories != NULL) {
+			recursion->buffer = buffer;
+			recursion->bufferend = bufferend;
+			recursion->current = pathend;
+
+			if(recursion->buffer < recursion->current) {
+				DIR *dirp = opendir(recursion->buffer);
+
+				if(dirp != NULL) {
+					recursion->directories[0] = dirp;
+					recursion->count = 1;
+
+					if(recursion->current[-1] != '/') {
+						*recursion->current = '/';
+						recursion->current++;
+					}
+				} else {
+					free(recursion->directories);
+					return -1;
+				}
+			} else {
+				recursion->count = 0;
+			}
+		} else {
+			return -2;
+		}
+	} else {
+		return -3;
+	}
+
+	return 0;
+}
+
+static void
+fs_recursion_deinit(struct fs_recursion *recursion) {
+
+	free(recursion->directories);
+}
+
+static inline bool
+fs_recursion_is_empty(const struct fs_recursion *recursion) {
+
+	return recursion->count == 0;
+}
+
+static inline char *
+fs_recursion_path_end(const struct fs_recursion *recursion) {
+
+	return recursion->current;
+}
+
+static inline DIR *
+fs_recursion_peak(const struct fs_recursion *recursion) {
+
+	return recursion->directories[recursion->count - 1];
+}
+
+static int
+fs_recursion_push(struct fs_recursion *recursion, const char *name) {
+	char *nameend = stpncpy(recursion->current, name,
+		recursion->bufferend - recursion->current);
+
+	if(nameend < recursion->bufferend - 1) {
+		DIR *dirp = opendir(recursion->buffer);
+
+		if(dirp != NULL) {
+			if(recursion->count == recursion->capacity - 1) {
+				DIR **newdirectories = realloc(recursion->directories,
+					sizeof(*recursion->directories) * recursion->capacity * 2);
+
+				if(newdirectories == NULL) {
+					closedir(dirp);
+					return -1;
+				}
+
+				recursion->directories = newdirectories;
+				recursion->capacity *= 2;
+			}
+
+			*nameend = '/';
+			recursion->current = nameend + 1;
+			recursion->directories[recursion->count] = dirp;
+			recursion->count++;
+
+			return 0;
+		}
+
+		return -2;
+	}
+
+	return -3;
+}
+
+static void
+fs_recursion_pop(struct fs_recursion *recursion) {
+
+	recursion->count--;
+	closedir(recursion->directories[recursion->count]);
+
+	do {
+		recursion->current--;
+	} while(recursion->current[-1] != '/');
+}
+
+static inline bool
+fs_recursion_is_valid(const char *name) {
+
+	return name[0] != '.' || (name[1] != '\0' && (name[1] != '.' || name[2] != '\0'));
+}
 
 /**
  * The following macros complete the mode mask
@@ -134,7 +265,7 @@ fs_parsemode(const char *expression,
 		mode_t whomask = 0;
 		while(iswho(*expression)) {
 			whomask |= fs_mask_who(*expression);
-			expression += 1;
+			expression++;
 		}
 
 		if(isop(*expression)) {
@@ -142,16 +273,14 @@ fs_parsemode(const char *expression,
 				const char op = *expression;
 				mode_t permmask = 0;
 
-				expression += 1;
+				expression++;
 				if(ispermcopy(*expression)) {
-					permmask = fs_mask_permcopy(*expression,
-						parsed);
-					expression += 1;
+					permmask = fs_mask_permcopy(*expression, parsed);
+					expression++;
 				} else if(isperm(*expression)) {
 					do {
-						permmask |= fs_mask_perm(*expression,
-							*mode, isdir);
-						expression += 1;
+						permmask |= fs_mask_perm(*expression, *mode, isdir);
+						expression++;
 					} while(isperm(*expression));
 				} else {
 					break;
@@ -161,31 +290,18 @@ fs_parsemode(const char *expression,
 					if(whomask == 0) {
 						whomask = ~cmask;
 					}
-					parsed = fs_mask_op(parsed,
-						whomask, permmask, op);
+					parsed = fs_mask_op(parsed, whomask, permmask, op);
 				}
 			} while(isop(*expression));
 		} else {
 			break;
 		}
 	} while(*expression == ','
-		&& *(expression += 1) != '\0');
+		&& *(expression++) != '\0');
 
 	*mode = parsed;
 
 	return expression;
-}
-
-#define HEYLEL_FDLIMIT_DEFAULT	1024
-static int HEYLEL_UNUSED
-fs_fdlimit(int deflimit) {
-	struct rlimit rl;
-
-	if(getrlimit(RLIMIT_NOFILE, &rl) == 0) {
-		return rl.rlim_cur;
-	} else {
-		return deflimit;
-	}
 }
 
 /* HEYLEL_CORE_FS_H */

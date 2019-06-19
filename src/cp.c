@@ -26,6 +26,7 @@ static struct {
 	unsigned nofollowsources : 1;
 	unsigned followtraversal : 1;
 } cpargs;
+
 static mode_t cpumask;
 
 #define CP_IS_RECURSIVE()      (cpargs.recursive == 1)
@@ -38,73 +39,6 @@ static mode_t cpumask;
 /* Standards specifies append ONE slash if one not already here on paths */
 #define CP_ENSURE_SLASH(ptr) if((ptr)[-1] != '/') { *(ptr) = '/'; (ptr)++; }
 #define CP_UMASK(mode) ((mode) & ~cpumask)
-
-static void
-cp_usage(const char *cpname) {
-	fprintf(stderr, "usage: %s [-Pfip] source_file target_file\n"
-		"       %s [-Pfip] source_file... target\n"
-		"       %s -R [-H|-L|-P] [-fip] source_file... target\n",
-		cpname, cpname, cpname);
-	exit(1);
-}
-
-static void
-cp_parse_args(int argc,
-	char **argv) {
-	int c;
-
-	if(argc == 1) {
-		cp_usage(*argv);
-	}
-
-	while((c = getopt(argc, argv, "RLHPfip")) != -1) {
-		switch(c) {
-		case 'R':
-			cpargs.recursive = 1;
-			break;
-		case 'P':
-			cpargs.nofollowsources = 1;
-			cpargs.followtraversal = 0;
-			break;
-		case 'f':
-			cpargs.force = 1;
-			break;
-		case 'i':
-			cpargs.interactive = 1;
-			break;
-		case 'p':
-			cpargs.duplicate = 1;
-			break;
-		case 'H':
-			if(CP_IS_RECURSIVE()) {
-				cpargs.nofollowsources = 0;
-				cpargs.followtraversal = 0;
-				break;
-			}
-			/* fallthrough */
-		case 'L':
-			if(CP_IS_RECURSIVE()) {
-				cpargs.nofollowsources = 0;
-				cpargs.followtraversal = 1;
-				break;
-			}
-			/* fallthrough */
-		default:
-			cp_usage(*argv);
-		}
-	}
-
-	if(optind + 2 > argc) {
-		cp_usage(*argv);
-	}
-
-	/* The standard asks specific handling (see when creating a directory) for
-	permissions so we manually handle copies with the CP_UMASK macro which applies our umask */
-	cpumask = umask(0);
-	if(CP_DUPLICATES()) {
-		cpumask = 0;
-	}
-}
 
 static int
 cp_symlink_cow(const char *sourcefile, const char *destfile) {
@@ -393,6 +327,15 @@ cp_copy_argument(const char *sourcefile, char *destfile,
 	return 0;
 }
 
+static void
+cp_usage(const char *cpname) {
+	fprintf(stderr, "usage: %s [-Pfip] source_file target_file\n"
+		"       %s [-Pfip] source_file... target\n"
+		"       %s -R [-H|-L|-P] [-fip] source_file... target\n",
+		cpname, cpname, cpname);
+	exit(1);
+}
+
 static int
 cp(int argc,
 	char **argv) {
@@ -445,6 +388,64 @@ cp(int argc,
 	}
 
 	return 0;
+}
+
+static void
+cp_parse_args(int argc,
+	char **argv) {
+	int c;
+
+	if(argc == 1) {
+		cp_usage(*argv);
+	}
+
+	while((c = getopt(argc, argv, "RLHPfip")) != -1) {
+		switch(c) {
+		case 'R':
+			cpargs.recursive = 1;
+			break;
+		case 'P':
+			cpargs.nofollowsources = 1;
+			cpargs.followtraversal = 0;
+			break;
+		case 'f':
+			cpargs.force = 1;
+			break;
+		case 'i':
+			cpargs.interactive = 1;
+			break;
+		case 'p':
+			cpargs.duplicate = 1;
+			break;
+		case 'H':
+			if(CP_IS_RECURSIVE()) {
+				cpargs.nofollowsources = 0;
+				cpargs.followtraversal = 0;
+				break;
+			}
+			/* fallthrough */
+		case 'L':
+			if(CP_IS_RECURSIVE()) {
+				cpargs.nofollowsources = 0;
+				cpargs.followtraversal = 1;
+				break;
+			}
+			/* fallthrough */
+		default:
+			cp_usage(*argv);
+		}
+	}
+
+	if(optind + 2 > argc) {
+		cp_usage(*argv);
+	}
+
+	/* The standard asks specific handling (see when creating a directory) for
+	permissions so we manually handle copies with the CP_UMASK macro which applies our umask */
+	cpumask = umask(0);
+	if(CP_DUPLICATES()) {
+		cpumask = 0;
+	}
 }
 
 int
