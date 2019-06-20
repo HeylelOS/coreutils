@@ -189,26 +189,26 @@ chmod_change_argument(const char *file,
 		if((retval = -chmod_change(file, &st, modeexp, cmask)) == 0
 			&& S_ISDIR(st.st_mode) && recursive) {
 			struct fs_recursion recursion;
-			char path[PATH_MAX], * const pathend = path + sizeof(path);
+			char buffer[PATH_MAX], * const bufferend = buffer + sizeof(buffer);
 
 			if(fs_recursion_init(&recursion,
-				path, pathend, stpncpy(path, file, sizeof(path))) == 0) {
+				buffer, stpncpy(buffer, file, sizeof(buffer)), bufferend) == 0) {
 
 				while(!fs_recursion_is_empty(&recursion)) {
 					struct dirent *entry;
 
 					while((entry = readdir(fs_recursion_peak(&recursion))) != NULL) {
-						char *nameend = fs_recursion_path_end(&recursion);
+						char *pathend = fs_recursion_path_end(&recursion);
 
 						if(fs_recursion_is_valid(entry->d_name)
-							&& stpncpy(nameend, entry->d_name, pathend - nameend) < pathend) {
+							&& stpncpy(pathend, entry->d_name, bufferend - pathend) < bufferend) {
 
-							if(stat(path, &st) == 0) {
-								retval += -chmod_change(path, &st, modeexp, cmask);
+							if(stat(buffer, &st) == 0) {
+								retval += -chmod_change(buffer, &st, modeexp, cmask);
 
 								if(S_ISDIR(st.st_mode)) {
 									if(fs_recursion_push(&recursion, entry->d_name) != 0) {
-										warnx("Unable to explore directory %s", path);
+										warnx("Unable to explore directory %s", buffer);
 										retval++;
 									}
 								}

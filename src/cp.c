@@ -16,29 +16,23 @@
 #include <linux/fs.h>
 #endif
 
+#include "core_fs.h"
 #include "core_io.h"
 
-static struct {
+/* Standards specifies append ONE slash if one not already here on paths */
+#define CP_ENSURE_SLASH(pathnul) ((pathnul)[-1] != '/' ?\
+	(*(pathnul) = '/', (pathnul) + 1) : (pathnul))
+#define CP_PERMS(mode, args) ((mode) & S_IRWXA & ~(args).cmask)
+
+struct cp_args {
 	unsigned recursive : 1;
 	unsigned force : 1;
 	unsigned interactive : 1;
 	unsigned duplicate : 1;
-	unsigned nofollowsources : 1;
-	unsigned followtraversal : 1;
-} cpargs;
-
-static mode_t cpumask;
-
-#define CP_IS_RECURSIVE()      (cpargs.recursive == 1)
-#define CP_FORCES()            (cpargs.force == 1)
-#define CP_INTERACTS()         (cpargs.interactive == 1)
-#define CP_DUPLICATES()        (cpargs.duplicate == 1)
-#define CP_FOLLOWS_SOURCES()   (cpargs.nofollowsources == 0)
-#define CP_FOLLOWS_TRAVERSAL() (cpargs.followtraversal != 0)
-
-/* Standards specifies append ONE slash if one not already here on paths */
-#define CP_ENSURE_SLASH(ptr) if((ptr)[-1] != '/') { *(ptr) = '/'; (ptr)++; }
-#define CP_UMASK(mode) ((mode) & ~cpumask)
+	unsigned followssources : 1;
+	unsigned followstraversal : 1;
+	mode_t cmask;
+};
 
 static int
 cp_symlink_cow(const char *sourcefile, const char *destfile) {
@@ -54,7 +48,7 @@ cp_symlink_cow(const char *sourcefile, const char *destfile) {
 
 static int
 cp_regfile_cow(const char *sourcefile, const char *destfile,
-	const struct stat *statp) {
+	const struct stat *statp, const struct cp_args args) {
 #ifdef __APPLE__
 	return clonefile(sourcefile, destfile, 0);
 #elif defined(__linux__)
@@ -64,7 +58,7 @@ cp_regfile_cow(const char *sourcefile, const char *destfile,
 	if(fdsrc >= 0) {
 		int fddest = open(destfile,
 			O_WRONLY | O_TRUNC | O_CREAT,
-			statp->st_mode);
+			CP_PERMS(statp->st_mode, args));
 
 		if(fddest >= 0) {
 
@@ -88,12 +82,12 @@ cp_regfile_cow(const char *sourcefile, const char *destfile,
 
 static int
 cp_regfile(const char *sourcefile, const char *destfile,
-	const struct stat *statp) {
+	const struct stat *statp, const struct cp_args args) {
 	int fddest;
 	int retval = 0;
 
 	if(access(destfile, F_OK) == 0) {
-		if(CP_INTERACTS()) {
+		if(args.interactive == 1) {
 			char *line = NULL;
 			size_t capacity = 0;
 			char c;
@@ -115,11 +109,11 @@ cp_regfile(const char *sourcefile, const char *destfile,
 
 		fddest = open(destfile, O_WRONLY | O_TRUNC);
 
-		if(fddest == -1 && CP_FORCES()) {
+		if(fddest == -1 && args.force == 1) {
 			if(unlink(destfile) == 0) {
 				fddest = open(destfile,
 					O_WRONLY | O_TRUNC | O_CREAT,
-					statp->st_mode);
+					CP_PERMS(statp->st_mode, args));
 			} else {
 				warn("Unable to unlink %s", destfile);
 			}
@@ -127,7 +121,7 @@ cp_regfile(const char *sourcefile, const char *destfile,
 	} else {
 		fddest = open(destfile,
 			O_WRONLY | O_TRUNC | O_CREAT,
-			statp->st_mode);
+			CP_PERMS(statp->st_mode, args));
 	}
 
 	if(fddest >= 0) {
@@ -137,11 +131,11 @@ cp_regfile(const char *sourcefile, const char *destfile,
 			switch(io_flush_to(fdsrc, fddest,
 				statp->st_blksize)) {
 			case -1:
-				warn("%s to %s read failed", sourcefile, destfile);
+				warn("'%s' to '%s' read failed", sourcefile, destfile);
 				retval = -1;
 				break;
 			case 1:
-				warn("%s to %s write failed", sourcefile, destfile);
+				warn("'%s' to '%s' write failed", sourcefile, destfile);
 				retval = -1;
 				break;
 			default:
@@ -165,166 +159,155 @@ cp_regfile(const char *sourcefile, const char *destfile,
 
 static int
 cp_copy(const char *sourcefile, const struct stat *sourcestatp,
-	const char *destfile, const struct stat *deststatp);
-
-static int
-cp_directory(const char *sourcefile, const char *destfile) {
-	size_t sourcelen = strlen(sourcefile), destlen = strlen(destfile);
-	char *source = malloc(PATH_MAX), *dest = malloc(PATH_MAX);
+	const char *destfile, const struct stat *deststatp,
+	const struct cp_args args) {
 	int retval = 0;
-
-	if(source != NULL && dest != NULL) {
-		char *sourceend = stpncpy(source, sourcefile, sourcelen),
-			*destend = stpncpy(dest, destfile, destlen);
-		DIR *dirp;
-
-		CP_ENSURE_SLASH(sourceend);
-		CP_ENSURE_SLASH(destend);
-
-		if((dirp = opendir(sourcefile)) != NULL) {
-			struct dirent *entry;
-
-			while((entry = readdir(dirp)) != NULL) {
-				if(strcmp(".", entry->d_name) != 0
-					&& strcmp("..", entry->d_name) != 0) {
-					struct stat sourcestat;
-					const size_t length = strlen(entry->d_name);
-
-					if(length >= source + PATH_MAX - sourceend
-						|| length >= dest + PATH_MAX - destend) {
-						warnx("Filename too long in %s", sourcefile);
-						retval++;
-						continue;
-					}
-
-					strncpy(sourceend, entry->d_name, length + 1);
-					strncpy(destend, entry->d_name, length + 1);
-
-					if(CP_FOLLOWS_TRAVERSAL() ? stat(source, &sourcestat) == 0
-						: lstat(source, &sourcestat) == 0) {
-						struct stat deststat;
-
-						retval += cp_copy(source, &sourcestat,
-							dest, stat(dest, &deststat) == 0 ? &deststat : NULL);
-					} else {
-						warn("Unable to stat tree file %s", source);
-						retval++;
-					}
-				}
-			}
-
-			closedir(dirp);
-		} else {
-			warn("Unable to copy directory %s", sourcefile);
-			retval = 1;
-		}
-	}
-
-	free(source);
-	free(dest);
-
-	return retval;
-}
-
-static int
-cp_copy(const char *sourcefile, const struct stat *sourcestatp,
-	const char *destfile, const struct stat *deststatp) {
-	int error = 0, treeerrors = 0;
 
 	if(deststatp != NULL
 		&& sourcestatp->st_ino == deststatp->st_ino) {
-		warnx("%s and %s are identical (not copied)", sourcefile, destfile);
-		error = 1;
+		warnx("'%s' and '%s' are identical (not copied)", sourcefile, destfile);
+		retval = 1;
 	} else {
 		switch(sourcestatp->st_mode & S_IFMT) {
 		case S_IFBLK:
 		case S_IFCHR:
-			if(mknod(destfile, CP_UMASK(sourcestatp->st_mode & 0777), sourcestatp->st_dev) == -1) {
-				warn("%s unable to copy to %s as device", sourcefile, destfile);
-				error = 1;
+			if(mknod(destfile, CP_PERMS(sourcestatp->st_mode, args), sourcestatp->st_dev) == -1) {
+				warn("'%s' unable to copy to '%s' as device", sourcefile, destfile);
+				retval = 1;
 			}
 			break;
 		case S_IFIFO:
-			if(mkfifo(destfile, CP_UMASK(sourcestatp->st_mode & 0777)) == -1) {
-				warn("%s unable to copy to %s as fifo", sourcefile, destfile);
-				error = 1;
+			if(mkfifo(destfile, CP_PERMS(sourcestatp->st_mode, args)) == -1) {
+				warn("'%s' unable to copy to '%s' as fifo", sourcefile, destfile);
+				retval = 1;
 			}
 			break;
 		case S_IFLNK:
 			if(cp_symlink_cow(sourcefile, destfile) == -1
 				&& symlink(sourcefile, destfile) == -1) {
-				error = 1;
+				retval = 1;
 			}
 			break;
 		case S_IFREG:
-			if(cp_regfile_cow(sourcefile, destfile, sourcestatp) == -1
-				&& cp_regfile(sourcefile, destfile, sourcestatp) == -1) {
-				error = 1;
+			if(cp_regfile_cow(sourcefile, destfile, sourcestatp, args) == -1
+				&& cp_regfile(sourcefile, destfile, sourcestatp, args) == -1) {
+				retval = 1;
 			}
 			break;
 		case S_IFDIR:
-			if(CP_IS_RECURSIVE()) {
-				if(mkdir(destfile, CP_UMASK(sourcestatp->st_mode & 0777) | S_IRWXU) == 0) {
-					treeerrors = cp_directory(sourcefile, destfile);
-					if(chmod(destfile, CP_UMASK(sourcestatp->st_mode & 0777)) == -1) {
-						warn("Unable to keep %s permissions' for %s", sourcefile, destfile);
-						error = 1;
-					}
+			if(args.recursive == 1) {
+				if(mkdir(destfile, CP_PERMS(sourcestatp->st_mode, args) | S_IRWXU) == 0) {
 				} else {
 					warn("Unable to create directory %s", destfile);
-					error = 1;
+					retval = 1;
 				}
 			} else {
-				warnx("Missing -R to copy directories: %s to %s", sourcefile, destfile);
-				error = 1;
+				warnx("-R not specified, for: '%s' to '%s'", sourcefile, destfile);
+				retval = 1;
 			}
 			break;
 		default:
 			warnx("%s has unsupported file type", sourcefile);
-			error = 1;
+			retval = 1;
 			break;
 		}
 	}
 
-	if(CP_DUPLICATES() && error == 0) {
+	if(args.duplicate == 1 && retval == 0) {
 		struct timespec times[2] = { sourcestatp->st_atim, sourcestatp->st_mtim };
 
 		if(utimensat(AT_FDCWD, destfile, times,
-			(sourcestatp->st_mode & S_IFMT) == S_IFLNK ? AT_SYMLINK_NOFOLLOW : 0) == -1) {
-			warn("Unable to duplicate time properties of %s for %s", sourcefile, destfile);
-			error = 1;
+			S_ISLNK(sourcestatp->st_mode) ? AT_SYMLINK_NOFOLLOW : 0) == -1) {
+			warn("Unable to duplicate time properties of '%s' for '%s'", sourcefile, destfile);
+			retval = 1;
 		}
 
-		int destumask = 06777;
+		mode_t destmask = S_ISALL | S_IRWXA;
 		if(chown(destfile, sourcestatp->st_uid, sourcestatp->st_gid) == -1) {
-			warn("Unable to duplicate owners of %s for %s", sourcefile, destfile);
-			destumask = 0777;
-			error = 1;
+			warn("Unable to duplicate owners of '%s' for '%s'", sourcefile, destfile);
+			destmask ^= S_ISUID | S_ISGID;
+			retval = 1;
 		}
 
-		if(chmod(destfile, CP_UMASK(sourcestatp->st_mode & destumask)) == -1) {
-			warn("Unable to duplicate permissions of %s for %s", sourcefile, destfile);
-			error = 1;
+		if(chmod(destfile, sourcestatp->st_mode & destmask & ~args.cmask) == -1) {
+			warn("Unable to duplicate permissions of '%s' for '%s'", sourcefile, destfile);
+			retval = 1;
 		}
 	}
 
-	return error + treeerrors;
+	return retval;
 }
 
 static int
-cp_copy_argument(const char *sourcefile, char *destfile,
-	struct stat *deststatp) {
+cp_copy_argument(const char *sourcefile,
+	char *destfile, char *destfilenul, const char *destfileend,
+	const struct stat *deststatp, const struct cp_args args) {
 	struct stat sourcestat;
+	int retval = 0;
 
-	if(CP_FOLLOWS_SOURCES() ? stat(sourcefile, &sourcestat) == 0
+	if(args.followssources == 1 ? stat(sourcefile, &sourcestat) == 0
 		: lstat(sourcefile, &sourcestat) == 0) {
-		return cp_copy(sourcefile, &sourcestat, destfile, deststatp);
+		if((retval = cp_copy(sourcefile, &sourcestat, destfile, deststatp, args)) == 0
+			&& S_ISDIR(sourcestat.st_mode)) {
+			char buffer[PATH_MAX], * const bufferend = buffer + sizeof(buffer);
+			char *buffernul = stpncpy(buffer, sourcefile, bufferend - buffer);
+			struct fs_recursion recursion;
+
+			if(destfilenul < destfileend - 1
+				&& fs_recursion_init(&recursion, buffer, buffernul, bufferend) == 0) {
+				char *hierfilenul = CP_ENSURE_SLASH(destfilenul);
+
+				while(!fs_recursion_is_empty(&recursion)) {
+					struct dirent *entry;
+
+					while((entry = readdir(fs_recursion_peak(&recursion))) != NULL) {
+						char *pathend = fs_recursion_path_end(&recursion);
+
+						if(fs_recursion_is_valid(entry->d_name)
+							&& stpncpy(pathend, entry->d_name, bufferend - pathend) < bufferend
+							&& (hierfilenul = stpncpy(hierfilenul, entry->d_name, destfileend - hierfilenul)) < destfileend - 1) {
+
+							printf("%s -> %s\n", buffer, destfile);
+
+							if(entry->d_type == DT_DIR) {
+								fs_recursion_push(&recursion, entry->d_name);
+								hierfilenul = (*hierfilenul = '/', hierfilenul + 1);
+							} else {
+								while(hierfilenul[-1] != '/') {
+									hierfilenul--;
+								}
+							}
+						}
+					}
+
+					*hierfilenul = '\0';
+					*fs_recursion_path_end(&recursion) = '\0';
+					printf("Poping %s -> %s\n", buffer, destfile);
+					do {
+						hierfilenul--;
+					} while(hierfilenul[-1] != '/');
+					fs_recursion_pop(&recursion);
+				}
+
+				fs_recursion_deinit(&recursion);
+			} else {
+				warnx("Unable to explore hierarchy of %s", sourcefile);
+				retval++;
+			}
+
+			*destfilenul = '\0';
+			/* POSIX leaves undefined behaviour on bits other than S_IRWXA for mkdir or creat, don't forget to set sticky bit when chmod */
+			if(chmod(destfile, sourcestat.st_mode & (S_ISVTX | S_IRWXA) & ~args.cmask) == -1) {
+				warn("Unable to keep '%s' permissions' for '%s'", sourcefile, destfile);
+				retval = 1;
+			}
+		}
 	} else {
 		warn("Unable to stat source file %s", sourcefile);
-		return 1;
+		retval = 1;
 	}
 
-	return 0;
+	return retval;
 }
 
 static void
@@ -336,129 +319,115 @@ cp_usage(const char *cpname) {
 	exit(1);
 }
 
-static int
-cp(int argc,
+static struct cp_args
+cp_parse_args(int argc,
 	char **argv) {
-	char target[PATH_MAX];
-	char *targetend = stpncpy(target, argv[argc - 1], sizeof(target));
-	char **sourcefiles = argv + optind;
+	struct cp_args args;
+	int c;
+
+	while((c = getopt(argc, argv, "RLHPfip")) != -1) {
+		switch(c) {
+		case 'R':
+			args.recursive = 1;
+			break;
+		case 'P':
+			args.followssources = 0;
+			args.followstraversal = 0;
+			break;
+		case 'f':
+			args.force = 1;
+			break;
+		case 'i':
+			args.interactive = 1;
+			break;
+		case 'p':
+			args.duplicate = 1;
+			break;
+		case 'H':
+			if(args.recursive == 1) {
+				args.followssources = 1;
+				args.followstraversal = 0;
+				break;
+			}
+			/* fallthrough */
+		case 'L':
+			if(args.recursive == 1) {
+				args.followssources = 1;
+				args.followstraversal = 1;
+				break;
+			}
+			/* fallthrough */
+		default:
+			warnx("Unknown argument -%c", c);
+			cp_usage(*argv);
+		}
+	}
+
+	if(argc - optind < 2) {
+		warnx("Not enough arguments");
+		cp_usage(*argv);
+	}
+
+	args.cmask = umask(0);
+	if(args.duplicate == 1) {
+		args.cmask = 0;
+	}
+
+	return args;
+}
+
+int
+main(int argc,
+	char **argv) {
+	const struct cp_args args = cp_parse_args(argc, argv);
+	char **argpos = argv + optind, ** const argend = argv + argc - 1;
+	char target[PATH_MAX], * const targetend = target + sizeof(target);
+	char *targetnul = stpncpy(target, argv[argc - 1], sizeof(target));
 	struct stat targetstat;
 	int retval = 0;
 
 	if(*target == '\0') {
 		errx(1, "Empty target path invalid");
-	} else if(target[sizeof(target) - 2] != '\0') { /* -2 for the slash if we need it */
+	} else if(targetnul >= targetend - 1) { /* -1 for the slash if we need it */
 		errx(1, "Target path too long");
 	}
 
 	if(stat(target, &targetstat) == 0) {
 		if(S_ISDIR(targetstat.st_mode)) { /* Synopsis 2 & 3 */
-			const size_t targetendcapacity = target + sizeof(target) - targetend;
-			char ** const sourcefilesend = argv + argc - 1;
+			targetnul = CP_ENSURE_SLASH(targetnul);
 
-			CP_ENSURE_SLASH(targetend);
+			while(argpos != argend) {
+				char *sourcefile = *argpos;
+				char *destfilenul = stpncpy(targetnul, basename(sourcefile), targetend - targetnul);
 
-			while(sourcefiles != sourcefilesend) {
-				char *sourcefile = *sourcefiles;
-
-				if(stpncpy(targetend, basename(sourcefile), targetendcapacity) < target + sizeof(target)) {
-					retval += cp_copy_argument(sourcefile, target, NULL);
+				if(destfilenul < targetend) {
+					retval += cp_copy_argument(sourcefile,
+						target, destfilenul, targetend,
+						lstat(target, &targetstat) == 0 ? &targetstat : NULL, args);
 				} else {
 					warnx("Destination path too long for source file %s", sourcefile);
 					retval++;
 				}
 
-				sourcefiles++;
+				argpos++;
 			}
 		} else if(argc - optind == 2) { /* Synopsis 1 */
-			retval = cp_copy_argument(*sourcefiles, target, &targetstat);
+			retval = cp_copy_argument(*argpos,
+				target, targetnul, targetend, &targetstat, args);
 		} else {
 			warnx("%s is not a directory", target);
 			cp_usage(*argv);
 		}
 	} else if(errno == ENOENT) {
 		if(argc - optind == 2) { /* Synopsis 1 */
-			retval = cp_copy_argument(*sourcefiles, target, NULL);
+			retval = cp_copy_argument(*argpos,
+				target, targetnul, targetend, NULL, args);
 		} else {
 			warnx("%s doesn't exist and multiple source files were provided", target);
 			cp_usage(*argv);
 		}
 	} else {
 		err(1, "Unable to stat target %s", target);
-	}
-
-	return 0;
-}
-
-static void
-cp_parse_args(int argc,
-	char **argv) {
-	int c;
-
-	if(argc == 1) {
-		cp_usage(*argv);
-	}
-
-	while((c = getopt(argc, argv, "RLHPfip")) != -1) {
-		switch(c) {
-		case 'R':
-			cpargs.recursive = 1;
-			break;
-		case 'P':
-			cpargs.nofollowsources = 1;
-			cpargs.followtraversal = 0;
-			break;
-		case 'f':
-			cpargs.force = 1;
-			break;
-		case 'i':
-			cpargs.interactive = 1;
-			break;
-		case 'p':
-			cpargs.duplicate = 1;
-			break;
-		case 'H':
-			if(CP_IS_RECURSIVE()) {
-				cpargs.nofollowsources = 0;
-				cpargs.followtraversal = 0;
-				break;
-			}
-			/* fallthrough */
-		case 'L':
-			if(CP_IS_RECURSIVE()) {
-				cpargs.nofollowsources = 0;
-				cpargs.followtraversal = 1;
-				break;
-			}
-			/* fallthrough */
-		default:
-			cp_usage(*argv);
-		}
-	}
-
-	if(optind + 2 > argc) {
-		cp_usage(*argv);
-	}
-
-	/* The standard asks specific handling (see when creating a directory) for
-	permissions so we manually handle copies with the CP_UMASK macro which applies our umask */
-	cpumask = umask(0);
-	if(CP_DUPLICATES()) {
-		cpumask = 0;
-	}
-}
-
-int
-main(int argc,
-	char **argv) {
-	int retval = 0;
-	cp_parse_args(argc, argv);
-
-	if(argc - optind >= 2) {
-		retval = cp(argc, argv);
-	} else {
-		warnx("Not enough arguments");
-		cp_usage(*argv);
 	}
 
 	return retval;

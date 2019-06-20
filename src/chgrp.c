@@ -61,10 +61,10 @@ chgrp_change_hierarchy(const char *file, gid_t gid,
 
 		if(S_ISDIR(st.st_mode)) {
 			struct fs_recursion recursion;
-			char path[PATH_MAX], * const pathend = path + sizeof(path);
+			char buffer[PATH_MAX], * const bufferend = buffer + sizeof(buffer);
 
 			if(fs_recursion_init(&recursion,
-				path, pathend, stpncpy(path, file, sizeof(path))) == 0) {
+				buffer, stpncpy(buffer, file, sizeof(buffer)), bufferend) == 0) {
 
 				while(!fs_recursion_is_empty(&recursion)) {
 					struct dirent *entry;
@@ -73,18 +73,18 @@ chgrp_change_hierarchy(const char *file, gid_t gid,
 						if(fs_recursion_is_valid(entry->d_name)) {
 							if(entry->d_type == DT_DIR) {
 								if(fs_recursion_push(&recursion, entry->d_name) == 0) {
-									retval += -chgrp_change_follow(path, gid, traversal);
+									retval += -chgrp_change_follow(buffer, gid, traversal);
 								} else {
-									warnx("Unable to explore directory %s", path);
+									warnx("Unable to explore directory %s", buffer);
 									retval++;
 								}
 							} else {
-								char *nameend = fs_recursion_path_end(&recursion);
+								char *pathend = fs_recursion_path_end(&recursion);
 
-								if(stpncpy(nameend, entry->d_name, pathend - nameend) < pathend) {
-									retval += -chgrp_change_follow(path, gid, traversal);
+								if(stpncpy(pathend, entry->d_name, bufferend - pathend) < bufferend) {
+									retval += -chgrp_change_follow(buffer, gid, traversal);
 								} else {
-									warnx("Unable to chgrp %s: Path too long", path);
+									warnx("Unable to chgrp %s: Path too long", buffer);
 									retval++;
 								}
 							}

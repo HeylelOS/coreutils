@@ -25,32 +25,32 @@ struct fs_recursion {
 
 	char *buffer;
 	const char *bufferend;
-	char *current;
+	char *buffernul;
 };
 
 static int
 fs_recursion_init(struct fs_recursion *recursion,
-	char *buffer, const char *bufferend, char *pathend) {
+	char *buffer, char *buffernul, const char *bufferend) {
 
-	if(pathend < bufferend) {
+	if(buffernul < bufferend) {
 		recursion->capacity = 16;
 		recursion->directories = malloc(sizeof(*recursion->directories) * recursion->capacity);
 
 		if(recursion->directories != NULL) {
 			recursion->buffer = buffer;
 			recursion->bufferend = bufferend;
-			recursion->current = pathend;
+			recursion->buffernul = buffernul;
 
-			if(recursion->buffer < recursion->current) {
+			if(recursion->buffer < recursion->buffernul) {
 				DIR *dirp = opendir(recursion->buffer);
 
 				if(dirp != NULL) {
 					recursion->directories[0] = dirp;
 					recursion->count = 1;
 
-					if(recursion->current[-1] != '/') {
-						*recursion->current = '/';
-						recursion->current++;
+					if(recursion->buffernul[-1] != '/') {
+						*recursion->buffernul = '/';
+						recursion->buffernul++;
 					}
 				} else {
 					free(recursion->directories);
@@ -84,7 +84,7 @@ fs_recursion_is_empty(const struct fs_recursion *recursion) {
 static inline char *
 fs_recursion_path_end(const struct fs_recursion *recursion) {
 
-	return recursion->current;
+	return recursion->buffernul;
 }
 
 static inline DIR *
@@ -95,8 +95,8 @@ fs_recursion_peak(const struct fs_recursion *recursion) {
 
 static int
 fs_recursion_push(struct fs_recursion *recursion, const char *name) {
-	char *nameend = stpncpy(recursion->current, name,
-		recursion->bufferend - recursion->current);
+	char *nameend = stpncpy(recursion->buffernul, name,
+		recursion->bufferend - recursion->buffernul);
 
 	if(nameend < recursion->bufferend - 1) {
 		DIR *dirp = opendir(recursion->buffer);
@@ -116,7 +116,7 @@ fs_recursion_push(struct fs_recursion *recursion, const char *name) {
 			}
 
 			*nameend = '/';
-			recursion->current = nameend + 1;
+			recursion->buffernul = nameend + 1;
 			recursion->directories[recursion->count] = dirp;
 			recursion->count++;
 
@@ -136,9 +136,9 @@ fs_recursion_pop(struct fs_recursion *recursion) {
 	closedir(recursion->directories[recursion->count]);
 
 	do {
-		recursion->current--;
-	} while(recursion->current != recursion->buffer
-		&& recursion->current[-1] != '/');
+		recursion->buffernul--;
+	} while(recursion->buffernul != recursion->buffer
+		&& recursion->buffernul[-1] != '/');
 }
 
 static inline bool
