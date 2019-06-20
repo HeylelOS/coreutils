@@ -24,8 +24,8 @@ struct fs_recursion {
 	size_t count;
 
 	char *buffer;
-	const char *bufferend;
 	char *buffernul;
+	const char *bufferend;
 };
 
 static int
@@ -102,7 +102,7 @@ fs_recursion_push(struct fs_recursion *recursion, const char *name) {
 		DIR *dirp = opendir(recursion->buffer);
 
 		if(dirp != NULL) {
-			if(recursion->count == recursion->capacity - 1) {
+			if(recursion->count == recursion->capacity) {
 				DIR **newdirectories = realloc(recursion->directories,
 					sizeof(*recursion->directories) * recursion->capacity * 2);
 
