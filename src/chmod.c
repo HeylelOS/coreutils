@@ -206,11 +206,10 @@ chmod_change_argument(const char *file,
 							if(stat(buffer, &st) == 0) {
 								retval += -chmod_change(buffer, &st, modeexp, cmask);
 
-								if(S_ISDIR(st.st_mode)) {
-									if(fs_recursion_push(&recursion, entry->d_name) != 0) {
-										warnx("Unable to explore directory %s", buffer);
-										retval++;
-									}
+								if(S_ISDIR(st.st_mode)
+									&& fs_recursion_push(&recursion, entry->d_name) != 0) {
+									warnx("Unable to explore directory %s", buffer);
+									retval++;
 								}
 							} else {
 								warn("stat %s", file);

@@ -96,24 +96,10 @@ cp_regfile(const char *sourcefile, const char *destfile,
 	int retval = 0;
 
 	if(access(destfile, F_OK) == 0) {
-		if(args.interactive == 1) {
-			char *line = NULL;
-			size_t capacity = 0;
-			char c;
-
-			fprintf(stderr, "Do you want to overwrite '%s' with '%s'? ", destfile, sourcefile);
-			if(getline(&line, &capacity, stdin) == -1) {
-				warn("Unable to read interactive prompt");
-				retval = 1;
-			} else {
-				c = *line;
-			}
-
-			free(line);
-			if(retval == 1
-				|| (c != 'y' && c != 'Y')) {
-				return retval;
-			}
+		if(args.interactive == 1
+			&& !io_prompt_confirm("Do you want to overwrite '%s' with '%s'? ",
+				destfile, sourcefile)) {
+			return 0;
 		}
 
 		fddest = open(destfile, O_WRONLY | O_TRUNC);
@@ -211,7 +197,7 @@ cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 					retval = 1;
 				}
 			} else {
-				warnx("-R not specified, for: '%s' to '%s'", sourcefile, destfile);
+				warnx("-R not specified, won't copy '%s' to '%s'", sourcefile, destfile);
 				retval = 1;
 			}
 			break;
@@ -377,7 +363,6 @@ cp_copy_argument(const char *sourcefile,
 							if(args.followstraversal == 1 ? stat(buffer, &sourcestat) == 0
 								: lstat(buffer, &sourcestat) == 0) {
 
-								printf("%s -> %s\n", buffer, destfile);
 								if(cp_copy(buffer, &sourcestat, destfile, NULL, args) == 0) {
 									if(S_ISDIR(sourcestat.st_mode)
 										&& cp_recursion_push(&recursion, entry->d_name, &sourcestat) == -1) {
@@ -421,8 +406,7 @@ cp_usage(const char *cpname) {
 }
 
 static struct cp_args
-cp_parse_args(int argc,
-	char **argv) {
+cp_parse_args(int argc, char **argv) {
 	struct cp_args args;
 	int c;
 
@@ -519,7 +503,7 @@ main(int argc,
 			warnx("%s is not a directory", target);
 			cp_usage(*argv);
 		}
-	} else if(errno == ENOENT) {
+	} else if(errno == ENOENT || errno == ENOTDIR) {
 		if(argc - optind == 2) { /* Synopsis 1 */
 			retval = cp_copy_argument(*argpos,
 				target, targetnul, targetend, NULL, args);

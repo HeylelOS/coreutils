@@ -2,6 +2,9 @@
 #ifndef HEYLEL_CORE_IO_H
 #define HEYLEL_CORE_IO_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <alloca.h>
@@ -11,6 +14,27 @@
 #endif
 
 /* IO Function */
+
+static bool HEYLEL_UNUSED
+io_prompt_confirm(const char *format, ...) {
+	bool valid = false;
+	va_list ap;
+
+	va_start(ap, format);
+	if(vfprintf(stderr, format, ap) >= 0) {
+		char *line = NULL;
+		size_t capacity = 0;
+
+		if(getline(&line, &capacity, stdin) > 0) {
+			valid = *line == 'y' || *line == 'Y';
+		}
+		free(line);
+	}
+	va_end(ap);
+
+
+	return valid;
+}
 
 /**
  * This function returns the best suiting block size

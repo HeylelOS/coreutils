@@ -7,100 +7,46 @@
 #include "core_fs.h"
 
 static int
-chgrp_change(const char *file, const struct stat *statp, gid_t gid) {
+chgrp_at(int dirfd, const char *name, const char *path,
+	struct stat *statp, gid_t gid, bool follows) {
+	int flags = follows ? 0 : AT_SYMLINK_NOFOLLOW;
 	int retval;
 
-	if(S_ISLNK(statp->st_mode)) {
-		if((retval = lchown(file, statp->st_uid, gid)) == -1) {
-			warn("lchown %s", file);
+	if((retval = fstatat(dirfd, name, statp, flags)) == 0) {
+		if((retval = fchownat(dirfd, name, statp->st_uid, gid, flags)) == -1) {
+			warn("chown %s", path);
 		}
 	} else {
-		if((retval = chown(file, statp->st_uid, gid)) == -1) {
-			warn("chown %s", file);
-		} else if((retval = chmod(file, statp->st_mode & (S_ISVTX | S_IRWXA))) == -1) {
-			warn("chmod %s", file);
-		}
+		warn("stat %s", path);
 	}
 
 	return retval;
 }
 
 static int
-chgrp_change_follow(const char *file, gid_t gid, bool follows) {
-	struct stat st;
-	int retval;
+chgrp_hierarchy(const char *directory, gid_t gid, bool follows) {
+	struct fs_recursion recursion;
+	int retval = 0;
 
-	if(follows ? (retval = -stat(file, &st)) == 0
-		: (retval = -lstat(file, &st)) == 0) {
-		retval = -chgrp_change(file, &st, gid);
-	} else {
-		warn("stat %s", file);
-	}
+	if(fs_recursion_init(&recursion, directory, 256, follows) == 0) {
+		do {
+			while(fs_recursion_next(&recursion) == 0 && *recursion.name != '\0') {
+				struct stat st;
 
-	return retval;
-}
-
-static int
-chgrp_change_hierarchy(const char *file, gid_t gid,
-	bool follows, bool traversal) {
-	struct stat st;
-	int retval;
-
-	if((retval = -stat(file, &st)) == 0) {
-		if(!follows) {
-			struct stat lst;
-
-			if((retval = -lstat(file, &lst)) == 0) {
-				retval = -chgrp_change(file, &lst, gid);
-			} else {
-				warn("lstat %s", file);
-			}
-		} else {
-			retval = -chgrp_change(file, &st, gid);
-		}
-
-		if(S_ISDIR(st.st_mode)) {
-			struct fs_recursion recursion;
-			char buffer[PATH_MAX], * const bufferend = buffer + sizeof(buffer);
-
-			if(fs_recursion_init(&recursion,
-				buffer, stpncpy(buffer, file, sizeof(buffer)), bufferend) == 0) {
-
-				while(!fs_recursion_is_empty(&recursion)) {
-					struct dirent *entry;
-
-					while((entry = readdir(fs_recursion_peak(&recursion))) != NULL) {
-						if(fs_recursion_is_valid(entry->d_name)) {
-							if(entry->d_type == DT_DIR) {
-								if(fs_recursion_push(&recursion, entry->d_name) == 0) {
-									retval += -chgrp_change_follow(buffer, gid, traversal);
-								} else {
-									warnx("Unable to explore directory %s", buffer);
-									retval++;
-								}
-							} else {
-								char *pathend = fs_recursion_path_end(&recursion);
-
-								if(stpncpy(pathend, entry->d_name, bufferend - pathend) < bufferend) {
-									retval += -chgrp_change_follow(buffer, gid, traversal);
-								} else {
-									warnx("Unable to chgrp %s: Path too long", buffer);
-									retval++;
-								}
-							}
-						}
+				if(chgrp_at(dirfd(recursion.dirp), recursion.name, recursion.path,
+					&st, gid, follows) == 0) {
+					if(S_ISDIR(st.st_mode)) {
+						fs_recursion_push(&recursion);
 					}
-
-					fs_recursion_pop(&recursion);
+				} else {
+					retval++;
 				}
-
-				fs_recursion_deinit(&recursion);
-			} else {
-				warnx("Unable to explore hierarchy of %s", file);
 			}
-		}
+		} while(fs_recursion_pop(&recursion) == 0);
+
+		fs_recursion_deinit(&recursion);
 	} else {
-		warn("stat %s", file);
+		retval = 1;
 	}
 
 	return retval;
@@ -200,11 +146,14 @@ main(int argc,
 
 		while(argpos != argend) {
 			const char *file = *argpos;
+			struct stat st;
 
-			if(args.recursive == 1) {
-				retval += chgrp_change_hierarchy(file, gid, args.follows == 1, args.followstraversal == 1);
+			if(chgrp_at(AT_FDCWD, file, file, &st, gid, args.follows == 1) == 0) {
+				if(S_ISDIR(st.st_mode) && args.recursive == 1) {
+					retval += chgrp_hierarchy(file, gid, args.followstraversal == 1);
+				}
 			} else {
-				retval += chgrp_change_follow(file, gid, args.follows == 1);
+				retval++;
 			}
 
 			argpos++;
