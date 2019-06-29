@@ -1,8 +1,10 @@
 #ifndef HEYLEL_CORE_FS_H
 #define HEYLEL_CORE_FS_H
 
+#ifdef __GLIBC__
 #define _XOPEN_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -42,20 +44,9 @@ fs_is_dot_or_dot_dot(const char *name) {
 	return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
 }
 
-static inline DIR *
-fs_opendir(const char *directory) {
-	DIR *dirp = opendir(directory);
-
-	if(directory == NULL) {
-		warn("Unable to open directory %s", directory);
-	}
-
-	return dirp;
-}
-
 static DIR *
-fs_opendirat(DIR *dirp, const char *path, int flags) {
-	int newdirfd = openat(dirfd(dirp), path, flags);
+fs_opendirat(int dirfd, const char *path, int flags) {
+	int newdirfd = openat(dirfd, path, flags);
 	DIR *newdirp = NULL;
 
 	if(newdirfd >= 0) {
@@ -76,7 +67,7 @@ static int
 fs_recursion_init(struct fs_recursion *recursion,
 	const char *directory, size_t size, bool follows) {
 
-	if((recursion->dirp = fs_opendir(directory)) == NULL) {
+	if((recursion->dirp = fs_opendirat(AT_FDCWD, directory, O_DIRECTORY | O_NOFOLLOW)) == NULL) {
 		goto fs_recursion_init_err0;
 	}
 
@@ -89,8 +80,7 @@ fs_recursion_init(struct fs_recursion *recursion,
 	recursion->count = 0;
 	recursion->capacity = 16;
 
-	if((recursion->name = stpncpy(recursion->path, directory,
-			recursion->pathend - recursion->path)) >= recursion->pathend - 1
+	if((recursion->name = stpncpy(recursion->path, directory, size)) >= recursion->pathend - 1
 		|| (recursion->locations = malloc(sizeof(*recursion->locations) * recursion->capacity)) == NULL) {
 		goto fs_recursion_init_err2;
 	}
@@ -128,10 +118,8 @@ fs_recursion_next(struct fs_recursion *recursion) {
 	} while(entry != NULL && fs_is_dot_or_dot_dot(entry->d_name));
 
 	if(entry != NULL) {
-		char *name;
-
-		while((name = stpncpy(recursion->name, entry->d_name,
-			recursion->pathend - recursion->name)) >= recursion->pathend - 1) {
+		while(stpncpy(recursion->name, entry->d_name,
+			recursion->pathend - recursion->name) >= recursion->pathend - 1) {
 			size_t length = recursion->name - recursion->path,
 				capacity = recursion->pathend - recursion->path;
 			char *newpath = realloc(recursion->path, capacity * 2);
@@ -160,7 +148,7 @@ fs_recursion_push(struct fs_recursion *recursion) {
 	DIR *newdirp;
 
 	if(location != -1
-		&& (newdirp = fs_opendirat(recursion->dirp, recursion->name,
+		&& (newdirp = fs_opendirat(dirfd(recursion->dirp), recursion->name,
 			recursion->flags)) != NULL) {
 		if(recursion->count == recursion->capacity) {
 			long *newlocations = realloc(recursion->locations,
@@ -205,9 +193,9 @@ fs_recursion_pop(struct fs_recursion *recursion) {
 		*recursion->name = '\0';
 
 		if((recursion->flags & O_NOFOLLOW) == 0) {
-			newdirp = fs_opendir(recursion->path);
+			newdirp = fs_opendirat(AT_FDCWD, recursion->path, recursion->flags);
 		} else {
-			newdirp = fs_opendirat(recursion->dirp, "..", O_DIRECTORY);
+			newdirp = fs_opendirat(dirfd(recursion->dirp), "..", recursion->flags);
 		}
 
 		if(newdirp != NULL) {

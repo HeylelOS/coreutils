@@ -161,71 +161,20 @@ chmod_mode_apply(const char *modeexp,
 }
 
 static int
-chmod_change(const char *file, const struct stat *statp,
+chmod_change(const char *file, struct stat *statp,
 	const char *modeexp, mode_t cmask) {
-	mode_t mode = statp->st_mode & (S_ISALL | S_IRWXA);
-	int retval = -1;
-	int c;
-
-	if((c = chmod_mode_apply(modeexp, &mode, cmask, S_ISDIR(statp->st_mode))) == 0) {
-		if((retval = chmod(file, mode)) == -1) {
-			warn("chmod %s", file);
-		}
-	} else {
-		warnx("Unable to parse mode '%s', stopped at '%c'", modeexp, c);
-	}
-
-	return retval;
-}
-
-static int
-chmod_change_argument(const char *file,
-	const char *modeexp, mode_t cmask,
-	bool recursive) {
-	struct stat st;
 	int retval;
 
-	if((retval = -stat(file, &st)) == 0) {
-		if((retval = -chmod_change(file, &st, modeexp, cmask)) == 0
-			&& S_ISDIR(st.st_mode) && recursive) {
-			struct fs_recursion recursion;
-			char buffer[PATH_MAX], * const bufferend = buffer + sizeof(buffer);
+	if((retval = stat(file, statp)) == 0) {
+		mode_t mode = statp->st_mode & (S_ISALL | S_IRWXA);
+		int c;
 
-			if(fs_recursion_init(&recursion,
-				buffer, stpncpy(buffer, file, sizeof(buffer)), bufferend) == 0) {
-
-				while(!fs_recursion_is_empty(&recursion)) {
-					struct dirent *entry;
-
-					while((entry = readdir(fs_recursion_peak(&recursion))) != NULL) {
-						char *pathend = fs_recursion_path_end(&recursion);
-
-						if(fs_recursion_is_valid(entry->d_name)
-							&& stpncpy(pathend, entry->d_name, bufferend - pathend) < bufferend) {
-
-							if(stat(buffer, &st) == 0) {
-								retval += -chmod_change(buffer, &st, modeexp, cmask);
-
-								if(S_ISDIR(st.st_mode)
-									&& fs_recursion_push(&recursion, entry->d_name) != 0) {
-									warnx("Unable to explore directory %s", buffer);
-									retval++;
-								}
-							} else {
-								warn("stat %s", file);
-								retval++;
-							}
-						}
-					}
-
-					fs_recursion_pop(&recursion);
-				}
-
-				fs_recursion_deinit(&recursion);
-			} else {
-				warnx("Unable to explore hierarchy of %s", file);
-				retval++;
+		if((c = chmod_mode_apply(modeexp, &mode, cmask, S_ISDIR(statp->st_mode))) == 0) {
+			if((retval = chmod(file, mode)) == -1) {
+				warn("chmod %s", file);
 			}
+		} else {
+			warnx("Unable to parse mode '%s', stopped at '%c'", modeexp, c);
 		}
 	} else {
 		warn("stat %s", file);
@@ -264,8 +213,30 @@ main(int argc,
 
 		while(argpos != argend) {
 			const char *file = *argpos;
+			struct stat st;
 
-			retval += chmod_change_argument(file, modeexp, cmask, recursive);
+			if(chmod_change(file, &st, modeexp, cmask) == 0
+				&& S_ISDIR(st.st_mode) && recursive) {
+				struct fs_recursion recursion;
+
+				if(fs_recursion_init(&recursion, file, 256, true) == 0) {
+					do {
+						while(fs_recursion_next(&recursion) == 0 && *recursion.name != '\0') {
+							if(chmod_change(recursion.path, &st, modeexp, cmask) == 0) {
+								if(S_ISDIR(st.st_mode)) {
+									fs_recursion_push(&recursion);
+								}
+							} else {
+								retval++;
+							}
+						}
+					} while(fs_recursion_pop(&recursion) == 0);
+
+					fs_recursion_deinit(&recursion);
+				} else {
+					retval++;
+				}
+			}
 
 			argpos++;
 		}

@@ -7,104 +7,30 @@
 
 #include "core_fs.h"
 
-static int
-chown_change(const char *file, const struct stat *statp,
-	uid_t uid, gid_t *gidp) {
-	int retval;
-
-	if(S_ISLNK(statp->st_mode)) {
-		if((retval = lchown(file, uid, gidp == NULL ? statp->st_gid : *gidp)) == -1) {
-			warn("lchown %s", file);
-		}
-	} else {
-		if((retval = chown(file, uid, gidp == NULL ? statp->st_gid : *gidp)) == -1) {
-			warn("chown %s", file);
-		} else if((retval = chmod(file, statp->st_mode & (S_ISVTX | S_IRWXA))) == -1) {
-			warn("chmod %s", file);
-		}
-	}
-
-	return retval;
-}
+struct chown_args {
+	unsigned recursive : 1;
+	unsigned follows : 1;
+	unsigned followstraversal : 1;
+};
 
 static int
-chown_change_follow(const char *file,
-	uid_t uid, gid_t *gidp, bool follows) {
-	struct stat st;
+chown_at(int dirfd, const char *name, const char *path,
+	struct stat *statp, uid_t uid, gid_t *gidp, bool follows) {
+	int flags = follows ? 0 : AT_SYMLINK_NOFOLLOW;
 	int retval;
 
-	if(follows ? (retval = -stat(file, &st)) == 0
-		: (retval = -lstat(file, &st)) == 0) {
-		retval = -chown_change(file, &st, uid, gidp);
-	} else {
-		warn("stat %s", file);
-	}
-
-	return retval;
-}
-
-static int
-chown_change_hierarchy(const char *file,
-	uid_t uid, gid_t *gidp,
-	bool follows, bool traversal) {
-	struct stat st;
-	int retval;
-
-	if((retval = -stat(file, &st)) == 0) {
-		if(!follows) {
-			struct stat lst;
-
-			if((retval = -lstat(file, &lst)) == 0) {
-				retval = -chown_change(file, &lst, uid, gidp);
-			} else {
-				warn("lstat %s", file);
+	if((retval = fstatat(dirfd, name, statp, flags)) == 0) {
+		if((retval = fchownat(dirfd, name, uid,
+				gidp == NULL ? statp->st_gid : *gidp, flags)) == 0) {
+			if((retval = fchmodat(dirfd, name,
+					statp->st_mode & (S_ISVTX | S_IRWXA), flags)) == -1) {
+				warn("chmod %s", path);
 			}
 		} else {
-			retval = -chown_change(file, &st, uid, gidp);
-		}
-
-		if(S_ISDIR(st.st_mode)) {
-			struct fs_recursion recursion;
-			char buffer[PATH_MAX], * const bufferend = buffer + sizeof(buffer);
-
-			if(fs_recursion_init(&recursion,
-				buffer, stpncpy(buffer, file, sizeof(buffer)), bufferend) == 0) {
-
-				while(!fs_recursion_is_empty(&recursion)) {
-					struct dirent *entry;
-
-					while((entry = readdir(fs_recursion_peak(&recursion))) != NULL) {
-						if(fs_recursion_is_valid(entry->d_name)) {
-							if(entry->d_type == DT_DIR) {
-								if(fs_recursion_push(&recursion, entry->d_name) == 0) {
-									retval += -chown_change_follow(buffer, uid, gidp, traversal);
-								} else {
-									warnx("Unable to explore directory %s", buffer);
-									retval++;
-								}
-							} else {
-								char *pathend = fs_recursion_path_end(&recursion);
-
-								if(stpncpy(pathend, entry->d_name, bufferend - pathend) < bufferend) {
-									retval += -chown_change_follow(buffer, uid, gidp, traversal);
-								} else {
-									warnx("Unable to chown %s: Path too long", buffer);
-									retval++;
-								}
-							}
-						}
-					}
-
-					fs_recursion_pop(&recursion);
-				}
-
-				fs_recursion_deinit(&recursion);
-			} else {
-				warnx("Unable to explore hierarchy of %s", file);
-			}
+			warn("chown %s", path);
 		}
 	} else {
-		warn("stat %s", file);
+		warn("stat %s", path);
 	}
 
 	return retval;
@@ -169,21 +95,15 @@ chown_uid_gid(char *ownergroup, uid_t *uidp, gid_t *gidp) {
 
 static void
 chown_usage(const char *chownname) {
-	fprintf(stderr, "usage: %s [-h] owner[:group] file...\n"
-		"       %s -R [-H|-L|-P] owner[:group] file...\n",
+	fprintf(stderr, "usage: %s [-h] group file...\n"
+		"       %s -R [-H|-L|-P] group file...\n",
 		chownname, chownname);
 	exit(1);
 }
 
-int
-main(int argc,
-	char **argv) {
-	struct {
-		unsigned recursive : 1;
-		unsigned follows : 1;
-		unsigned followstraversal : 1;
-	} args = { 0, 1, 0 };
-	int retval = 0;
+static struct chown_args
+chown_parse_args(int argc, char **argv) {
+	struct chown_args args = { 0, 0, 0 };
 	int c;
 
 	while((c = getopt(argc, argv, "hRHLP")) != -1) {
@@ -227,30 +147,75 @@ main(int argc,
 		}
 	}
 
-	if(argc - optind > 1) {
-		char **argpos = argv + optind + 1, ** const argend = argv + argc;
-		uid_t uid;
-		gid_t gid, *gidp = NULL;
-
-		if(chown_uid_gid(argv[optind], &uid, &gid) == 1) {
-			gidp = &gid;
-		}
-		umask(0); /* Clear the set-user id and set-group id bits */
-
-		while(argpos != argend) {
-			const char *file = *argpos;
-
-			if(args.recursive == 1) {
-				retval += chown_change_hierarchy(file, uid, gidp,
-					args.follows == 1, args.followstraversal == 1);
-			} else {
-				retval += chown_change_follow(file, uid, gidp, args.follows == 1);
-			}
-
-			argpos++;
-		}
-	} else {
+	if(argc - optind < 2) {
 		chown_usage(*argv);
+	}
+
+	return args;
+}
+
+static inline bool
+chown_recur(const char *file, struct stat *statp, int *errors,
+	const struct chown_args args) {
+
+	if(args.follows == 0 && S_ISLNK(statp->st_mode)
+		&& stat(file, statp) == -1) {
+		warn("stat %s", file);
+		++*errors;
+	}
+
+	return S_ISDIR(statp->st_mode) && args.recursive == 1;
+}
+
+int
+main(int argc,
+	char **argv) {
+	const struct chown_args args = chown_parse_args(argc, argv);
+	char **argpos = argv + optind + 1, ** const argend = argv + argc;
+	gid_t gid, *gidp = NULL;
+	uid_t uid;
+	int retval = 0;
+
+	umask(0); /* When clearing set-user-ID and set-group-ID bits */
+
+	if(chown_uid_gid(argv[optind], &uid, &gid) == 1) {
+		gidp = &gid;
+	}
+
+	while(argpos != argend) {
+		const char *file = *argpos;
+		struct stat st;
+
+		/* chown operand */
+		if(chown_at(AT_FDCWD, file, file, &st, uid, gidp, args.follows == 1) == 0) {
+			/* Get destination stats if it didn't follow a symlink,
+			enter recursion if it's a directory and -R specified */
+			if(chown_recur(file, &st, &retval, args)) {
+				struct fs_recursion recursion;
+
+				if(fs_recursion_init(&recursion, file, 256, args.followstraversal == 1) == 0) {
+					do {
+						while(fs_recursion_next(&recursion) == 0 && *recursion.name != '\0') {
+							if(chown_at(dirfd(recursion.dirp), recursion.name, recursion.path,
+									&st, uid, gidp, args.followstraversal == 1) == 0
+								&& S_ISDIR(st.st_mode)) {
+								fs_recursion_push(&recursion);
+							} else {
+								retval++;
+							}
+						}
+					} while(fs_recursion_pop(&recursion) == 0);
+
+					fs_recursion_deinit(&recursion);
+				} else {
+					retval++;
+				}
+			}
+		} else {
+			retval++;
+		}
+
+		argpos++;
 	}
 
 	return retval;

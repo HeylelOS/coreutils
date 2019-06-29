@@ -1,10 +1,17 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <pwd.h>
 #include <grp.h>
 #include <errno.h>
 #include <err.h>
 
 #include "core_fs.h"
+
+struct chgrp_args {
+	unsigned recursive : 1;
+	unsigned follows : 1;
+	unsigned followstraversal : 1;
+};
 
 static int
 chgrp_at(int dirfd, const char *name, const char *path,
@@ -13,40 +20,16 @@ chgrp_at(int dirfd, const char *name, const char *path,
 	int retval;
 
 	if((retval = fstatat(dirfd, name, statp, flags)) == 0) {
-		if((retval = fchownat(dirfd, name, statp->st_uid, gid, flags)) == -1) {
+		if((retval = fchownat(dirfd, name, statp->st_uid, gid, flags)) == 0) {
+			if((retval = fchmodat(dirfd, name,
+					statp->st_mode & (S_ISVTX | S_IRWXA), flags)) == -1) {
+				warn("chmod %s", path);
+			}
+		} else {
 			warn("chown %s", path);
 		}
 	} else {
 		warn("stat %s", path);
-	}
-
-	return retval;
-}
-
-static int
-chgrp_hierarchy(const char *directory, gid_t gid, bool follows) {
-	struct fs_recursion recursion;
-	int retval = 0;
-
-	if(fs_recursion_init(&recursion, directory, 256, follows) == 0) {
-		do {
-			while(fs_recursion_next(&recursion) == 0 && *recursion.name != '\0') {
-				struct stat st;
-
-				if(chgrp_at(dirfd(recursion.dirp), recursion.name, recursion.path,
-					&st, gid, follows) == 0) {
-					if(S_ISDIR(st.st_mode)) {
-						fs_recursion_push(&recursion);
-					}
-				} else {
-					retval++;
-				}
-			}
-		} while(fs_recursion_pop(&recursion) == 0);
-
-		fs_recursion_deinit(&recursion);
-	} else {
-		retval = 1;
 	}
 
 	return retval;
@@ -87,15 +70,9 @@ chgrp_usage(const char *chgrpname) {
 	exit(1);
 }
 
-int
-main(int argc,
-	char **argv) {
-	struct {
-		unsigned recursive : 1;
-		unsigned follows : 1;
-		unsigned followstraversal : 1;
-	} args = { 0, 1, 0 };
-	int retval = 0;
+static struct chgrp_args
+chgrp_parse_args(int argc, char **argv) {
+	struct chgrp_args args = { 0, 0, 0 };
 	int c;
 
 	while((c = getopt(argc, argv, "hRHLP")) != -1) {
@@ -139,27 +116,70 @@ main(int argc,
 		}
 	}
 
-	if(argc - optind > 1) {
-		char **argpos = argv + optind + 1, ** const argend = argv + argc;
-		gid_t gid = chgrp_gid(argv[optind]);
-		umask(0); /* Clear the set-user id and set-group id bits */
-
-		while(argpos != argend) {
-			const char *file = *argpos;
-			struct stat st;
-
-			if(chgrp_at(AT_FDCWD, file, file, &st, gid, args.follows == 1) == 0) {
-				if(S_ISDIR(st.st_mode) && args.recursive == 1) {
-					retval += chgrp_hierarchy(file, gid, args.followstraversal == 1);
-				}
-			} else {
-				retval++;
-			}
-
-			argpos++;
-		}
-	} else {
+	if(argc - optind < 2) {
 		chgrp_usage(*argv);
+	}
+
+	return args;
+}
+
+static inline bool
+chgrp_recur(const char *file, struct stat *statp, int *errors,
+	const struct chgrp_args args) {
+
+	if(args.follows == 0 && S_ISLNK(statp->st_mode)
+		&& stat(file, statp) == -1) {
+		warn("stat %s", file);
+		++*errors;
+	}
+
+	return S_ISDIR(statp->st_mode) && args.recursive == 1;
+}
+
+int
+main(int argc,
+	char **argv) {
+	const struct chgrp_args args = chgrp_parse_args(argc, argv);
+	char **argpos = argv + optind + 1, ** const argend = argv + argc;
+	gid_t gid = chgrp_gid(argv[optind]);
+	int retval = 0;
+
+	umask(0); /* When clearing set-user-ID and set-group-ID bits */
+
+	while(argpos != argend) {
+		const char *file = *argpos;
+		struct stat st;
+
+		/* chgrp operand */
+		if(chgrp_at(AT_FDCWD, file, file, &st, gid, args.follows == 1) == 0) {
+			/* Get destination stats if it didn't follow a symlink,
+			enter recursion if it's a directory and -R specified */
+			if(chgrp_recur(file, &st, &retval, args)) {
+				struct fs_recursion recursion;
+
+				if(fs_recursion_init(&recursion, file, 256, args.followstraversal == 1) == 0) {
+					do {
+						while(fs_recursion_next(&recursion) == 0 && *recursion.name != '\0') {
+							if(chgrp_at(dirfd(recursion.dirp), recursion.name, recursion.path,
+									&st, gid, args.followstraversal == 1) == 0
+								&& S_ISDIR(st.st_mode)) {
+								fs_recursion_push(&recursion);
+							} else {
+								retval++;
+							}
+						}
+					} while(fs_recursion_pop(&recursion) == 0);
+
+					fs_recursion_deinit(&recursion);
+				} else {
+					retval++;
+				}
+			}
+		} else {
+			retval++;
+		}
+
+		argpos++;
 	}
 
 	return retval;
