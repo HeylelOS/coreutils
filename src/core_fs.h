@@ -85,6 +85,7 @@ fs_recursion_init(struct fs_recursion *recursion,
 		goto fs_recursion_init_err2;
 	}
 
+	*recursion->locations = 0;
 	if(recursion->name[-1] != '/') {
 		*recursion->name = '/';
 		recursion->name++;
@@ -111,10 +112,11 @@ fs_recursion_deinit(struct fs_recursion *recursion) {
 static int
 fs_recursion_next(struct fs_recursion *recursion) {
 	struct dirent *entry;
-	errno = 0;
 
 	do {
+		errno = 0;
 		entry = readdir(recursion->dirp);
+		recursion->locations[recursion->count]++;
 	} while(entry != NULL && fs_is_dot_or_dot_dot(entry->d_name));
 
 	if(entry != NULL) {
@@ -144,12 +146,10 @@ fs_recursion_next(struct fs_recursion *recursion) {
 
 static int
 fs_recursion_push(struct fs_recursion *recursion) {
-	long location = telldir(recursion->dirp);
-	DIR *newdirp;
+	DIR *newdirp = fs_opendirat(dirfd(recursion->dirp),
+		recursion->name, recursion->flags);
 
-	if(location != -1
-		&& (newdirp = fs_opendirat(dirfd(recursion->dirp), recursion->name,
-			recursion->flags)) != NULL) {
+	if(newdirp != NULL) {
 		if(recursion->count == recursion->capacity) {
 			long *newlocations = realloc(recursion->locations,
 				sizeof(*recursion->locations) * recursion->capacity * 2);
@@ -165,8 +165,8 @@ fs_recursion_push(struct fs_recursion *recursion) {
 
 		closedir(recursion->dirp);
 		recursion->dirp = newdirp;
-		recursion->locations[recursion->count] = location;
 		recursion->count++;
+		recursion->locations[recursion->count] = 0;
 
 		while(*recursion->name != '\0') {
 			recursion->name++;
@@ -182,7 +182,6 @@ fs_recursion_push(struct fs_recursion *recursion) {
 
 static int
 fs_recursion_pop(struct fs_recursion *recursion) {
-	int retval = -1;
 
 	if(recursion->count != 0) {
 		DIR *newdirp;
@@ -200,15 +199,16 @@ fs_recursion_pop(struct fs_recursion *recursion) {
 
 		if(newdirp != NULL) {
 			recursion->count--;
-			seekdir(newdirp, recursion->locations[recursion->count]);
+			for(long i = 0; i < recursion->locations[recursion->count]
+				&& readdir(newdirp) != NULL; i++);
 			closedir(recursion->dirp);
 			recursion->dirp = newdirp;
 
-			retval = 0;
+			return 0;
 		}
 	}
 
-	return retval;
+	return -1;
 }
 
 /* HEYLEL_CORE_FS_H */

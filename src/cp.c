@@ -232,168 +232,6 @@ cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 	return retval;
 }
 
-/*
-static int
-cp_recursion_init(struct cp_recursion *recursion, const struct stat *sourcestatp,
-	char *sourcefile, char *sourcefilenul, const char *sourcefileend,
-	char *destfile, char *destfilenul, const char *destfileend) {
-
-	if(destfilenul < destfileend - 1
-		&& fs_recursion_init(&recursion->source, sourcefile, sourcefilenul, sourcefileend) == 0) {
-		recursion->destfile = destfile;
-		recursion->destfilenul = CP_ENSURE_SLASH(destfilenul);
-		recursion->destfileend = destfileend;
-
-		if((recursion->stats = malloc(sizeof(*recursion->stats) * recursion->source.capacity)) != NULL) {
-			*recursion->stats = *sourcestatp;
-			return 0;
-		}
-
-		fs_recursion_deinit(&recursion->source);
-	}
-
-	return -1;
-}
-
-static void
-cp_recursion_deinit(struct cp_recursion *recursion) {
-	fs_recursion_deinit(&recursion->source);
-
-	free(recursion->stats);
-}
-
-static inline bool
-cp_recursion_is_empty(const struct cp_recursion *recursion) {
-
-	return fs_recursion_is_empty(&recursion->source);
-}
-
-static inline bool
-cp_recursion_is_valid(struct cp_recursion *recursion, const char *name) {
-
-	return fs_recursion_is_valid(name)
-		&& stpncpy(recursion->source.buffernul, name,
-			recursion->source.bufferend - recursion->source.buffernul) < recursion->source.bufferend
-		&& stpncpy(recursion->destfilenul, name, recursion->destfileend - recursion->destfilenul) < recursion->destfileend - 1;
-}
-
-static inline DIR *
-cp_recursion_peak(const struct cp_recursion *recursion, struct stat *deststatp) {
-
-	*deststatp = recursion->stats[recursion->source.count - 1];
-
-	return fs_recursion_peak(&recursion->source);
-}
-
-static int
-cp_recursion_push(struct cp_recursion *recursion, const char *name,
-	const struct stat *statp) {
-	const char *oldbuffernul = recursion->source.buffernul;
-
-	if(recursion->source.count == recursion->source.capacity) {
-		struct stat *newstats = realloc(recursion->stats,
-			sizeof(*recursion->stats) * recursion->source.capacity * 2);
-
-		if(newstats == NULL) {
-			return -1;
-		}
-
-		recursion->stats = newstats;
-	}
-
-	if(fs_recursion_push(&recursion->source, name) == 0) {
-		recursion->destfilenul += recursion->source.buffernul - oldbuffernul;
-		recursion->destfilenul[-1] = '/';
-		recursion->stats[recursion->source.count - 1] = *statp;
-
-		return 0;
-	}
-
-	return -1;
-}
-
-static int
-cp_recursion_pop(struct cp_recursion *recursion, const struct cp_args args) {
-
-	*recursion->source.buffernul = '\0';
-	*recursion->destfilenul = '\0';
-	fs_recursion_pop(&recursion->source);
-	do {
-		recursion->destfilenul--;
-	} while(recursion->destfilenul != recursion->destfile
-		&& recursion->destfilenul[-1] != '/');
-
-	// POSIX leaves undefined behaviour on bits other than S_IRWXA for mkdir, creat... Don't forget to leave sticky bit when chmod. Note also this function is only called when the directory has been succesfully created, so we can leave set-user/group-ID safely in the mask
-	mode_t destmask = (args.duplicate == 1 ? S_ISALL : S_ISVTX) | S_IRWXA;
-	if(chmod(recursion->destfile, recursion->stats[recursion->source.count].st_mode & destmask & ~args.cmask) == -1) {
-		warn("Unable to keep '%s' permissions' for '%s'", recursion->source.buffer, recursion->destfile);
-		return -1;
-	}
-
-	return 0;
-}
-
-static int
-cp_copy_argument(const char *sourcefile,
-	char *destfile, char *destfilenul, const char *destfileend,
-	const struct stat *deststatp, const struct cp_args args) {
-	struct stat sourcestat;
-	int retval = 0;
-
-	if(args.followssources == 1 ? stat(sourcefile, &sourcestat) == 0
-		: lstat(sourcefile, &sourcestat) == 0) {
-		if((retval = cp_copy(sourcefile, &sourcestat, destfile, deststatp, args)) == 0
-			&& S_ISDIR(sourcestat.st_mode)) {
-			char buffer[PATH_MAX], * const bufferend = buffer + sizeof(buffer);
-			char *buffernul = stpncpy(buffer, sourcefile, bufferend - buffer);
-			struct cp_recursion recursion;
-
-			if(cp_recursion_init(&recursion, &sourcestat,
-				buffer, buffernul, bufferend,
-				destfile, destfilenul, destfileend) == 0) {
-
-				while(!cp_recursion_is_empty(&recursion)) {
-					struct dirent *entry;
-
-					while((entry = readdir(cp_recursion_peak(&recursion, &sourcestat))) != NULL) {
-
-						if(cp_recursion_is_valid(&recursion, entry->d_name)) {
-							if(args.followstraversal == 1 ? stat(buffer, &sourcestat) == 0
-								: lstat(buffer, &sourcestat) == 0) {
-
-								if(cp_copy(buffer, &sourcestat, destfile, NULL, args) == 0) {
-									if(S_ISDIR(sourcestat.st_mode)
-										&& cp_recursion_push(&recursion, entry->d_name, &sourcestat) == -1) {
-										warnx("Unable to explore directory %s", buffer);
-										retval++;
-									}
-								} else {
-									retval++;
-								}
-							} else {
-								warn("Unable to stat traversal file %s", destfile);
-								retval++;
-							}
-						}
-					}
-
-					retval += -cp_recursion_pop(&recursion, args);
-				}
-
-				cp_recursion_deinit(&recursion);
-			} else {
-				warnx("Unable to explore hierarchy of %s", sourcefile);
-				retval++;
-			}
-		}
-	} else {
-		warn("Unable to stat source file %s", sourcefile);
-		retval = 1;
-	}
-
-	return retval;
-}
-*/
 static int
 cp_recursion_init(struct cp_recursion *recursion,
 	const char *source, const struct stat *sourcestatp,
@@ -440,7 +278,7 @@ cp_recursion_deinit(struct cp_recursion *recursion) {
 	fs_recursion_deinit(&recursion->source);
 }
 
-static inline int
+static int
 cp_recursion_next(struct cp_recursion *recursion) {
 
 	if(fs_recursion_next(&recursion->source) == 0) {
@@ -472,7 +310,7 @@ cp_recursion_push(struct cp_recursion *recursion, mode_t sourcemode) {
 		mode_t *newsourcemodes = realloc(recursion->sourcemodes,
 			sizeof(*recursion->sourcemodes) * recursion->source.capacity * 2);
 
-		if(newsourcemodes == NULL) {
+		if(newsourcemodes != NULL) {
 			recursion->sourcemodes = newsourcemodes;
 		} else {
 			return -1;
@@ -485,6 +323,8 @@ cp_recursion_push(struct cp_recursion *recursion, mode_t sourcemode) {
 		}
 		*recursion->dest.name = '/';
 		recursion->dest.name++;
+
+		recursion->sourcemodes[recursion->source.count] = sourcemode;
 
 		return 0;
 	}
@@ -524,6 +364,7 @@ cp_copy_argument(const char *sourcefile,
 
 	if(args.followssources == 1 ? stat(sourcefile, &sourcestat) == 0
 		: lstat(sourcefile, &sourcestat) == 0) {
+
 		if(cp_copy(sourcefile, &sourcestat, destfile, deststatp, args) == 0
 			&& S_ISDIR(sourcestat.st_mode)) {
 			struct cp_recursion recursion;
@@ -531,13 +372,21 @@ cp_copy_argument(const char *sourcefile,
 			if(cp_recursion_init(&recursion, sourcefile, &sourcestat,
 				destfile, 256, args.followstraversal == 1) == 0) {
 				do {
-					while(cp_recursion_next(&recursion) == 0 && recursion.source.name != '\0') {
-						if(cp_copy(recursion.source.path, &sourcestat,
+					while(cp_recursion_next(&recursion) == 0 && *recursion.source.name != '\0') {
+						if(args.followstraversal == 1 ? stat(recursion.source.path, &sourcestat) == 0
+							: lstat(recursion.source.path, &sourcestat) == 0) {
+
+							if(cp_copy(recursion.source.path, &sourcestat,
 								recursion.dest.path, NULL, args) == -1
-							|| (S_ISDIR(sourcestat.st_mode)
-								&& cp_recursion_push(&recursion, sourcestat.st_mode) == -1)) {
+								|| (S_ISDIR(sourcestat.st_mode)
+									&& cp_recursion_push(&recursion, sourcestat.st_mode) == -1)) {
+								retval++;
+							}
+						} else {
+							warn("Unable to stat source file %s", sourcefile);
 							retval++;
 						}
+
 					}
 				} while(cp_recursion_pop(&recursion, args) == 0);
 
