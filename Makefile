@@ -15,6 +15,7 @@ CP=build/bin/cp
 DIRNAME=build/bin/dirname
 ECHO=build/bin/echo
 FALSE=build/bin/false
+LN=build/bin/ln
 RM=build/bin/rm
 TRUE=build/bin/true
 UNIQ=build/bin/uniq
@@ -26,7 +27,7 @@ all: $(BUILDDIRS)\
 	$(ASA) $(BASENAME) $(CAT) $(CAL)\
 	$(CHGRP) $(CHMOD) $(CHOWN) $(CKSUM)\
 	$(CMP) $(CP) $(DIRNAME) $(ECHO)\
-	$(FALSE) $(RM) $(TRUE) $(UNIQ) $(UNLINK)
+	$(FALSE) $(LN) $(RM) $(TRUE) $(UNIQ) $(UNLINK)
 
 clean:
 	rm -rf build/
@@ -72,6 +73,9 @@ $(ECHO): src/echo.c
 	$(CC) $(CFLAGS) -D ECHO_XSI -o $@-xsi $^
 
 $(FALSE): src/false.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(LN): src/ln.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(RM): src/rm.c

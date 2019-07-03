@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <err.h>
 
+#include "core_fs.h"
 #include "core_io.h"
 
 struct rm_args {
@@ -19,24 +20,6 @@ struct rm_args {
 	unsigned force : 1;
 	unsigned interactive : 1;
 };
-
-struct rm_recursion {
-	DIR *dirp;
-
-	long *locations;
-	size_t count;
-	size_t capacity;
-
-	char *path;
-	char *pathnul;
-	const char *pathend;
-};
-
-static inline bool
-rm_is_dot_or_dot_dot(const char *name) {
-
-	return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
-}
 
 static bool
 rm_confirm(int dirfd, const char *file, const char *path,
@@ -59,6 +42,7 @@ rm_at(int dirfd, const char *file,
 		if(!S_ISDIR(statp->st_mode)
 			&& rm_confirm(dirfd, file, path, "Do you want to remove file", args)
 			&& (retval = unlinkat(dirfd, file, 0)) == -1) {
+
 			warn("unlink %s", path);
 		}
 	} else if(args.force == 0
@@ -69,168 +53,83 @@ rm_at(int dirfd, const char *file,
 	return retval;
 }
 
-static DIR *
-rm_opendirat(DIR *dirp, const char *path) {
-	int newdirfd = openat(dirfd(dirp), path, O_DIRECTORY | O_NOFOLLOW);
-	DIR *newdirp = NULL;
-
-	if(newdirfd >= 0) {
-		newdirp = fdopendir(newdirfd);
-
-		if(newdirp == NULL) {
-			close(newdirfd);
-		}
-	} else {
-		warn("Unable to explore %s", path);
-	}
-
-	return newdirp;
-}
-
 static int
-rm_recursion_init(struct rm_recursion *recursion, const char *directory) {
-
-	if((recursion->dirp = opendir(directory)) == NULL) {
-		goto rm_recursion_init_err0;
-	}
-
-	if((recursion->path = malloc(PATH_MAX)) == NULL) {
-		goto rm_recursion_init_err1;
-	}
-
-	recursion->pathend = recursion->path + PATH_MAX;
-	recursion->count = 0;
-	recursion->capacity = 16;
-
-	if((recursion->pathnul = stpncpy(recursion->path, directory,
-			recursion->pathend - recursion->path)) >= recursion->pathend - 1
-		|| (recursion->locations = malloc(sizeof(*recursion->locations) * recursion->capacity)) == NULL) {
-		goto rm_recursion_init_err2;
-	}
-
-	if(recursion->pathnul[-1] != '/') {
-		*recursion->pathnul = '/';
-		recursion->pathnul++;
-	}
-
-	return 0;
-
-rm_recursion_init_err2:
-	free(recursion->path);
-rm_recursion_init_err1:
-	closedir(recursion->dirp);
-rm_recursion_init_err0:
-	return -1;
-}
-
-static void
-rm_recursion_deinit(struct rm_recursion *recursion) {
-
-	closedir(recursion->dirp);
-	free(recursion->path);
-	free(recursion->locations);
-}
-
-static int
-rm_recursion_next(struct rm_recursion *recursion, struct dirent **entryp) {
-	errno = 0;
+rm_recursion_next(struct fs_recursion *recursion) {
+	struct dirent *entry;
+	(void)fs_recursion_next;
 
 	do {
-		*entryp = readdir(recursion->dirp);
-	} while(*entryp != NULL && rm_is_dot_or_dot_dot((*entryp)->d_name));
+		errno = 0;
+		entry = readdir(recursion->dirp);
+	} while(entry != NULL && fs_is_dot_or_dot_dot(entry->d_name));
 
-	if(*entryp != NULL) {
-		char *pathnul;
-
-		while((pathnul = stpncpy(recursion->pathnul, (*entryp)->d_name,
-			recursion->pathend - recursion->pathnul)) >= recursion->pathend - 1) {
-			size_t length = recursion->pathnul - recursion->path,
+	if(entry != NULL) {
+		while(stpncpy(recursion->name, entry->d_name,
+			recursion->pathend - recursion->name) >= recursion->pathend - 1) {
+			size_t length = recursion->name - recursion->path,
 				capacity = recursion->pathend - recursion->path;
 			char *newpath = realloc(recursion->path, capacity * 2);
 
 			if(newpath != NULL) {
 				recursion->path = newpath;
-				recursion->pathnul = newpath + length;
+				recursion->name = newpath + length;
 				recursion->pathend = newpath + capacity * 2;
 			} else {
 				return -1;
 			}
 		}
-
-		*pathnul = '\0';
 	} else if(errno != 0) {
-		warn("Unable to read entry at %s", recursion->path);
+		warn("Unable to read entry");
 		return -1;
-	}
-
-	return 0;
-}
-
-static int
-rm_recursion_push(struct rm_recursion *recursion, const char *name) {
-	long location = telldir(recursion->dirp);
-	DIR *newdirp;
-
-	if(location != -1
-		&& (newdirp = rm_opendirat(recursion->dirp, name)) != NULL) {
-		if(recursion->count == recursion->capacity) {
-			long *newlocations = realloc(recursion->locations,
-				sizeof(*recursion->locations) * recursion->capacity * 2);
-
-			if(newlocations != NULL) {
-				recursion->capacity *= 2;
-				recursion->locations = newlocations;
-			} else {
-				closedir(newdirp);
-				return -1;
-			}
-		}
-
-		closedir(recursion->dirp);
-		recursion->dirp = newdirp;
-		recursion->locations[recursion->count] = location;
-		recursion->count++;
-
-		while(*recursion->pathnul != '\0') {
-			recursion->pathnul++;
-		}
-		*recursion->pathnul = '/';
-		recursion->pathnul++;
 	} else {
-		return -1;
+		*recursion->name = '\0';
 	}
 
 	return 0;
 }
 
 static int
-rm_recursion_pop(struct rm_recursion *recursion, int *errors, const struct rm_args args) {
-	DIR *newdirp = rm_opendirat(recursion->dirp, "..");
+rm_recursion_pop(struct fs_recursion *recursion, int *errors, const struct rm_args args) {
 	int retval = -1;
+	(void)fs_recursion_pop;
 
-	if(newdirp != NULL) {
-		const char *base = basename(recursion->path);
+	if(recursion->count != 0) {
+		DIR *newdirp;
 
-		*recursion->pathnul = '\0';
-		if(rm_confirm(dirfd(newdirp), base, recursion->path, "Do you want to remove directory", args)
-			&& unlinkat(dirfd(newdirp), base, AT_REMOVEDIR) == -1) {
-			warn("rmdir %s", recursion->path);
-			++*errors;
+		recursion->name[-1] = '\0';
+		do {
+			recursion->name--;
+		} while(recursion->name[-1] != '/');
+
+		newdirp = fs_opendirat(dirfd(recursion->dirp), "..", recursion->flags);
+
+		if(newdirp != NULL) {
+			struct dirent *entry;
+			long i = 0;
+
+			recursion->count--;
+			if(rm_confirm(dirfd(newdirp), recursion->name, recursion->path, "Do you want to remove directory", args)
+				&& unlinkat(dirfd(newdirp), recursion->name, AT_REMOVEDIR) == -1) {
+
+				warn("rmdir %s", recursion->path);
+				recursion->locations[recursion->count]++;
+				++*errors;
+			}
+
+			while(i < recursion->locations[recursion->count]
+				&& (entry = readdir(newdirp)) != NULL) {
+				if(!fs_is_dot_or_dot_dot(entry->d_name)) {
+					i++;
+				}
+			}
+
+			closedir(recursion->dirp);
+			recursion->dirp = newdirp;
+
+			retval = 0;
 		}
 
-		if(recursion->count != 0) {
-				recursion->count--;
-				seekdir(newdirp, recursion->locations[recursion->count]);
-				closedir(recursion->dirp);
-				recursion->dirp = newdirp;
-
-				do {
-					recursion->pathnul--;
-				} while(recursion->pathnul[-1] != '/');
-				*recursion->pathnul = '\0';
-
-				retval = 0;
-		}
+		*recursion->name = '\0';
 	}
 
 	return retval;
@@ -238,25 +137,47 @@ rm_recursion_pop(struct rm_recursion *recursion, int *errors, const struct rm_ar
 
 static int
 rm_hierarchy(const char *directory, const struct rm_args args) {
-	struct rm_recursion recursion;
-	struct stat st;
+	struct fs_recursion recursion;
 	int retval = 0;
 
-	if(rm_recursion_init(&recursion, directory) == 0) {
-		do {
-			struct dirent *entry;
+	if(rm_confirm(AT_FDCWD,
+					directory, directory,
+					"Do you want to enter directory", args)) {
+		if(fs_recursion_init(&recursion, directory, 256, false) == 0) {
+			do {
+				if(rm_recursion_next(&recursion) == 0 && *recursion.name != '\0'
+					&& rm_confirm(dirfd(recursion.dirp),
+						recursion.name, recursion.path,
+						"Do you want to enter directory", args)) {
+					do {
+						struct stat st;
 
-			while(rm_recursion_next(&recursion, &entry) == 0 && entry != NULL) {
-				if(rm_at(dirfd(recursion.dirp), entry->d_name, recursion.path, &st, args) == 0
-					&& S_ISDIR(st.st_mode)) {
-					rm_recursion_push(&recursion, entry->d_name);
+						if(rm_at(dirfd(recursion.dirp), recursion.name,
+							recursion.path, &st, args) == -1
+							|| (S_ISDIR(st.st_mode)
+								&& fs_recursion_push(&recursion) == -1)) {
+							recursion.locations[recursion.count]++;
+							retval++;
+						}
+					} while(rm_recursion_next(&recursion) == 0 && *recursion.name != '\0');
+				} else {
+					recursion.locations[recursion.count]++;
 				}
-			}
-		} while(rm_recursion_pop(&recursion, &retval, args) == 0);
+			} while(rm_recursion_pop(&recursion, &retval, args) == 0);
 
-		rm_recursion_deinit(&recursion);
-	} else {
-		retval = 1;
+			recursion.name[-1] = '\0';
+			if(rm_confirm(AT_FDCWD, directory, directory,
+				"Do you want to remove directory", args)
+				&& rmdir(directory) == -1) {
+
+				warn("rmdir %s", directory);
+				retval++;
+			}
+
+			fs_recursion_deinit(&recursion);
+		} else {
+			retval++;
+		}
 	}
 
 	return retval;
@@ -313,7 +234,7 @@ main(int argc,
 		char *file = *argpos;
 		struct stat st;
 
-		if(!rm_is_dot_or_dot_dot(base) && *base != '/') {
+		if(!fs_is_dot_or_dot_dot(base) && *base != '/') {
 			if(rm_at(AT_FDCWD, file, file, &st, args) == 0
 				&& S_ISDIR(st.st_mode)) {
 

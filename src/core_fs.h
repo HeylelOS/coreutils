@@ -198,9 +198,18 @@ fs_recursion_pop(struct fs_recursion *recursion) {
 		}
 
 		if(newdirp != NULL) {
+			struct dirent *entry;
+			long i = 0;
+
 			recursion->count--;
-			for(long i = 0; i < recursion->locations[recursion->count]
-				&& readdir(newdirp) != NULL; i++);
+
+			while(i < recursion->locations[recursion->count]
+				&& (entry = readdir(newdirp)) != NULL) {
+				if(!fs_is_dot_or_dot_dot(entry->d_name)) {
+					i++;
+				}
+			}
+
 			closedir(recursion->dirp);
 			recursion->dirp = newdirp;
 

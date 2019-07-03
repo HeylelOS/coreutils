@@ -338,7 +338,7 @@ cp_recursion_pop(struct cp_recursion *recursion, const struct cp_args args) {
 	Note also this is only called when the directory has been succesfully created, so we can leave set-user/group-ID safely in the mask */
 	mode_t destmask = (args.duplicate == 1 ? S_ISALL : S_ISVTX) | S_IRWXA;
 
-	if(chmod(recursion->dest.path, recursion->sourcemodes[recursion->source.count - 1] & destmask & ~args.cmask) == -1) {
+	if(chmod(recursion->dest.path, recursion->sourcemodes[recursion->source.count] & destmask & ~args.cmask) == -1) {
 		warn("Unable to set '%s' permissions' for '%s'", recursion->source.path, recursion->dest.path);
 		return -1;
 	}
@@ -386,7 +386,6 @@ cp_copy_argument(const char *sourcefile,
 							warn("Unable to stat source file %s", sourcefile);
 							retval++;
 						}
-
 					}
 				} while(cp_recursion_pop(&recursion, args) == 0);
 
@@ -416,7 +415,7 @@ cp_usage(const char *cpname) {
 
 static struct cp_args
 cp_parse_args(int argc, char **argv) {
-	struct cp_args args;
+	struct cp_args args = { 0, 0, 0, 1, 0 };
 	int c;
 
 	while((c = getopt(argc, argv, "RLHPfip")) != -1) {
@@ -476,7 +475,7 @@ main(int argc,
 	const struct cp_args args = cp_parse_args(argc, argv);
 	char **argpos = argv + optind, ** const argend = argv + argc - 1;
 	char target[PATH_MAX], * const targetend = target + sizeof(target);
-	char *targetname = stpncpy(target, argv[argc - 1], sizeof(target));
+	char *targetname = stpncpy(target, *argend, sizeof(target));
 	struct stat targetstat;
 	int retval = 0;
 

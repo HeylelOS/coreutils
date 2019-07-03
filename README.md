@@ -55,7 +55,7 @@ do not hesitate to contact me.
 - [ ] join
 - [ ] kill
 - [ ] link
-- [ ] ln
+- [x] ln
 - [ ] logger
 - [ ] logname
 - [ ] ls
@@ -75,7 +75,7 @@ do not hesitate to contact me.
 - [ ] ps
 - [ ] pwd
 - [ ] renice
-- [ ] rm
+- [x] rm
 - [ ] rmdir
 - [ ] sh Using [zsh](https://github.com/zsh-users/zsh) as a replacement
 - [ ] sleep
