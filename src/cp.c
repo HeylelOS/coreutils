@@ -163,7 +163,8 @@ cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 	int retval = 0;
 
 	if(deststatp != NULL
-		&& sourcestatp->st_ino == deststatp->st_ino) {
+		&& sourcestatp->st_ino == deststatp->st_ino
+		&& sourcestatp->st_dev == deststatp->st_dev) {
 		warnx("'%s' and '%s' are identical (not copied)", sourcefile, destfile);
 		retval = -1;
 	} else {
