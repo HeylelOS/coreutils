@@ -187,7 +187,7 @@ main(int argc,
 		int statval2 = cmp_stat(file2, &st2);
 
 		if(statval1 == -1 || statval2 == -1
-			|| st1.st_ino != st2.st_ino) {
+			|| (st1.st_ino != st2.st_ino || st1.st_dev != st2.st_dev)) {
 
 			if(cmp(file1, st1.st_blksize,
 				file2, st2.st_blksize) == -1) {
