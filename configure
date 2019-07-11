@@ -1,0 +1,80 @@
+#!/bin/sh
+
+CONFIG_DEBUG=1
+
+while getopts hrd opt
+do
+	case $opt in
+	h) cat <<EOF
+\`configure' configures this package to adapt to many kinds of systems.
+
+Usage: ./configure [-h] [-r|-d] [VAR=VALUE]...
+
+To assign environment variables (e.g., CC, CFLAGS...), specify them as
+VAR=VALUE.  See below for descriptions of some of the useful variables.
+
+Defaults for the options are specified in brackets.
+
+Configuration:
+  -h                      display this help and exit
+
+Optional Features:
+  -d                      configure a debug build (default)
+  -r                      configure a release build
+
+Some influential environment variables:
+  CC              C compiler command [clang gcc cc]
+  CFLAGS          C compiler flags [-O3 -Wall -fPIC] when -r specified, [-g -Wall -fPIC] else
+  LDFLAGS         linker flags []
+
+  BUILDDIR        where the binaries and documentations will be built [./build]
+
+Use these variables to override the choices made by \`configure' or to help
+it to find libraries and programs with nonstandard names/locations.
+
+Report bugs to the package provider.
+EOF
+		exit 2 ;;
+	r) unset CONFIG_DEBUG ;;
+	d) CONFIG_DEBUG=1 ;;
+	?) echo "Unknown option: $opt" ;;
+	esac
+done
+
+shift $((OPTIND - 1))
+[ ! -z "$*" ] && export -- "$@"
+
+# Compilation
+if [ -z "$CC" ]
+then
+	for CC in clang gcc cc
+	do [ ! -z `which "$CC"` ] && break
+	done
+fi
+
+if [ ! -z "$CC" ]
+then echo "Using C compiler '$CC'"
+else echo "Unable to find C compiler" ; exit 1
+fi
+
+if [ -z "$CFLAGS" ]
+then
+	if [ ! -z "$CONFIG_DEBUG" ]
+	then CFLAGS='-g -Wall -fPIC'
+	else CFLAGS='-O3 -Wall -fPIC'
+	fi
+fi
+echo "Using C flags '$CFLAGS'"
+
+echo "Using Linker flags: '$LDFLAGS'"
+
+[ -z "$BUILDDIR" ] && BUILDDIR='./build'
+
+cat - Makefile.part <<EOF > Makefile
+CC=$CC
+CFLAGS=$CFLAGS
+LDFLAGS=$LDFLAGS
+
+BUILDDIR=$BUILDDIR
+EOF
+

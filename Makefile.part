@@ -1,8 +1,3 @@
-CC=musl-clang
-CFLAGS=-O3 -Wall -fPIC
-LDFLAGS=
-
-BUILDDIR=./build
 
 .PHONY: all install clean
 
