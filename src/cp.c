@@ -171,7 +171,7 @@ cp_copy(const char *sourcefile, const struct stat *sourcestatp,
 		switch(sourcestatp->st_mode & S_IFMT) {
 		case S_IFBLK:
 		case S_IFCHR:
-			if((retval = mknod(destfile, CP_PERMS(sourcestatp->st_mode, args), sourcestatp->st_dev)) == -1) {
+			if((retval = mknod(destfile, CP_PERMS(sourcestatp->st_mode, args), sourcestatp->st_rdev)) == -1) {
 				warn("'%s' unable to copy to '%s' as device", sourcefile, destfile);
 			}
 			break;
