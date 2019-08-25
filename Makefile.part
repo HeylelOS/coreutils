@@ -1,15 +1,13 @@
 
 .PHONY: all install clean
 
-all: build/bin/asa build/bin/basename build/bin/cal build/bin/cat build/bin/chgrp build/bin/chmod build/bin/chown build/bin/cksum build/bin/cmp build/bin/cp build/bin/dirname build/bin/echo build/bin/echo-xsi build/bin/false build/bin/ln build/bin/rm build/bin/true build/bin/uniq build/bin/unlink 
+all: build/bin/basename build/bin/cal build/bin/cat build/bin/chgrp build/bin/chmod build/bin/chown build/bin/cksum build/bin/cmp build/bin/cp build/bin/dirname build/bin/echo build/bin/echo-xsi build/bin/false build/bin/ln build/bin/rm build/bin/true build/bin/tty build/bin/uname build/bin/uniq build/bin/unlink 
 
 clean:
 	rm -rf $(BUILDDIR)
 
 $(BUILDDIR):
 	mkdir -p $@/bin
-build/bin/asa: src/asa.c $(BUILDDIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 build/bin/basename: src/basename.c $(BUILDDIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
@@ -57,6 +55,12 @@ build/bin/rm: src/rm.c src/core_fs.h src/core_io.h $(BUILDDIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 build/bin/true: src/true.c $(BUILDDIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+build/bin/tty: src/tty.c $(BUILDDIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+build/bin/uname: src/uname.c $(BUILDDIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 build/bin/uniq: src/uniq.c $(BUILDDIR)

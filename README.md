@@ -16,10 +16,9 @@ do not hesitate to contact me.
 
 ## Utilities
 
-- [x] asa
 - [ ] awk Using the [original awk](https://github.com/onetrueawk/awk) for now.
 - [x] basename
-- [ ] bc Will do it later, maybe create a scriptutils package with all unix-core scripts
+- [ ] bc
 - [x] cal
 - [x] cat
 - [x] chgrp
@@ -49,6 +48,7 @@ do not hesitate to contact me.
 - [ ] getconf
 - [ ] grep
 - [ ] head
+- [ ] iconv
 - [ ] id
 - [ ] ipcrm
 - [ ] ipcs
@@ -58,16 +58,22 @@ do not hesitate to contact me.
 - [x] ln
 - [ ] logger
 - [ ] logname
+- [ ] lp
 - [ ] ls
+- [ ] m4
+- [ ] mailx
+- [ ] man
 - [ ] mesg
 - [ ] mkdir
 - [ ] mkfifo
+- [ ] more
 - [ ] mv
 - [ ] newgrp
 - [ ] nice
 - [ ] nl
 - [ ] nohup
 - [ ] od
+- [ ] paste
 - [ ] patch
 - [ ] pathchk
 - [ ] pr
@@ -77,6 +83,7 @@ do not hesitate to contact me.
 - [ ] renice
 - [x] rm
 - [ ] rmdir
+- [ ] sed
 - [ ] sh Using [zsh](https://github.com/zsh-users/zsh) as a replacement
 - [ ] sleep
 - [ ] sort
@@ -93,13 +100,16 @@ do not hesitate to contact me.
 - [ ] tr
 - [x] true
 - [ ] tsort
-- [ ] tty
+- [x] tty
+- [ ] type
 - [ ] ulimit
-- [ ] uname
+- [x] uname
+- [ ] unexpand
 - [x] uniq
 - [x] unlink
+- [ ] vi Using [vim](https://github.com/vim/vim.git) as a replacement
 - [ ] wc
-- [ ] what
 - [ ] who
+- [ ] write
 - [ ] xargs
 

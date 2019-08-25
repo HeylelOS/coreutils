@@ -15,6 +15,7 @@ struct uname_args {
 
 static bool
 uname_print(const char *symbol, bool shouldwrite, bool previouswritten) {
+
 	if(shouldwrite) {
 		if(previouswritten) {
 			putchar(' ');
@@ -94,7 +95,7 @@ main(int argc,
 
 		return 0;
 	} else {
-		err(1, "uname()");
+		err(1, "uname");
 	}
 }
 
