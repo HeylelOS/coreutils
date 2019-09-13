@@ -144,8 +144,7 @@ cmp(const char *file1,
 static void
 cmp_usage(const char *cmpname) {
 
-	fprintf(stderr, "usage %s [-l|-s] file1 file2\n",
-		cmpname);
+	fprintf(stderr, "usage: %s [-l|-s] file1 file2\n", cmpname);
 	exit(1);
 }
 

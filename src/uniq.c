@@ -4,7 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
-#include <errno.h>
+#include <err.h>
 
 #define UNIQ_MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -15,149 +15,133 @@ do {\
 	(b) = c;\
 } while(false)
 
-static char *uniqname;
-static FILE *in, *out;
-/**
- * The following belongs to a class of function which prints
- * the output depending on its occurrences
- */
-static void (*uniq_print_occurrences)(char *, size_t);
-static size_t skipfields;
-static size_t skipchars;
+struct uniq_args {
+	FILE *in;
+	FILE *out;
+	/**
+	 * The following belongs to a class of function which prints
+	 * the output depending on its occurrences
+	 */
+	void (*print_occurrences)(FILE *, char *, size_t);
+	size_t skipfields;
+	size_t skipchars;
+};
 
 static void
-uniq_print_default(char *string,
-	size_t occurrences) {
+uniq_print_default(FILE *out, char *string, size_t occurrences) {
 
 	if(occurrences != 0) {
-		if(string == NULL) {
-			putchar('\n');
-		} else {
-			puts(string);
+		if(string != NULL) {
+			fputs(string, out);
 		}
+		fputc('\n', out);
 	}
 }
 
 static void
-uniq_print_count(char *string,
-	size_t occurrences) {
+uniq_print_count(FILE *out, char *string, size_t occurrences) {
 
 	if(occurrences != 0) {
-		printf("%ld %s\n", occurrences, string == NULL ? "" : string);
+		fprintf(out, "%ld %s\n", occurrences, string == NULL ? "" : string);
 	}
 }
 
 static void
-uniq_print_repeated(char *string,
-	size_t occurrences) {
+uniq_print_repeated(FILE *out, char *string, size_t occurrences) {
 
 	if(occurrences > 1) {
-		if(string == NULL) {
-			putchar('\n');
-		} else {
-			puts(string);
+		if(string != NULL) {
+			fputs(string, out);
 		}
+		fputc('\n', out);
 	}
 }
 
 static void
-uniq_print_not_repeated(char *string,
-	size_t occurrences) {
+uniq_print_not_repeated(FILE *out, char *string, size_t occurrences) {
 
 	if(occurrences == 1) {
-		if(string == NULL) {
-			putchar('\n');
-		} else {
-			puts(string);
+		if(string != NULL) {
+			fputs(string, out);
 		}
+		fputc('\n', out);
 	}
 }
 
+static void
+uniq_usage(const char *uniqname) {
+	fprintf(stderr, "usage: %s [-d|-c|-u] [-f fields] [-s char] [input_file [output_file]]\n", uniqname);
+	exit(1);
+}
+
 /**
- * We only miss adding the '+' delimiter, must make a custom getopt
+ * TODO: We only miss adding the '+' delimiter, must make a custom getopt
  */
-static int
-uniq_parse_args(int argc,
-	char **argv) {
-	int retval = 0;
+static struct uniq_args
+uniq_parse_args(int argc, char **argv) {
+	struct uniq_args args = {
+		.in = stdin,
+		.out = stdout,
+		.print_occurrences = uniq_print_default,
+		.skipfields = 0,
+		.skipchars = 0
+	};
+	char *endptr;
 	int c;
 
-	while(retval == 0
-		&& (c = getopt(argc, argv, ":cdf:s:u")) != -1) {
+	while((c = getopt(argc, argv, ":cdf:s:u")) != -1) {
 		switch(c) {
 		case 'c':
-			uniq_print_occurrences = uniq_print_count; break;
-		case 'd':
-			uniq_print_occurrences = uniq_print_repeated; break;
-		case 'f': {
-			char *endptr;
-			skipfields = strtoul(optarg, &endptr, 10);
-			if(*endptr != '\0') {
-				fprintf(stderr, "error: %s %s: Must be a decimal numeric\n", uniqname, optarg);
-				exit(1);
-			}
-		} break;
-		case 's': {
-			char *endptr;
-			skipchars = strtoul(optarg, &endptr, 10);
-			if(*endptr != '\0') {
-				fprintf(stderr, "error: %s %s: Must be a decimal numeric\n", uniqname, optarg);
-				exit(1);
-			}
-		} break;
-		case 'u':
-			uniq_print_occurrences = uniq_print_not_repeated; break;
-		case ':':
-			fprintf(stderr, "error: %s -%c: Missing argument\n", uniqname, optopt);
-			/* fallthrough */
-		default:
-			optind = argc;
+			args.print_occurrences = uniq_print_count;
 			break;
-		}
-	}
-
-	if(optind + 2 == argc) {
-		if(strcmp(argv[optind], "-") != 0) {
-			if((in = fopen(argv[optind], "r")) == NULL) {
-				fprintf(stderr, "error: %s %s: input %s\n",
-					uniqname, argv[optind], strerror(errno));
-				exit(1);
+		case 'd':
+			args.print_occurrences = uniq_print_repeated;
+			break;
+		case 'f':
+			args.skipfields = strtoul(optarg, &endptr, 10);
+			if(*endptr != '\0') {
+				warnx("%s: Ignored fields must be a decimal numeric\n", optarg);
+				uniq_usage(*argv);
 			}
-		}
-
-		optind += 1;
-		if(strcmp(argv[optind], "-") != 0) {
-			if((out = fopen(argv[optind], "w")) == NULL) {
-				fprintf(stderr, "error: %s %s: output %s\n",
-					uniqname, argv[optind], strerror(errno));
-				exit(1);
+			break;
+		case 's':
+			args.skipchars = strtoul(optarg, &endptr, 10);
+			if(*endptr != '\0') {
+				warnx("%s: Ignored chars must be a decimal numeric\n", optarg);
+				uniq_usage(*argv);
 			}
+			break;
+		case 'u':
+			args.print_occurrences = uniq_print_not_repeated;
+			break;
+		case ':':
+			warnx("-%c: Missing argument\n", optopt);
+			uniq_usage(*argv);
+		default:
+			warnx("Unknown argument -%c", c);
+			uniq_usage(*argv);
 		}
-	} else {
-		retval = -1;
 	}
 
-	return retval;
-}
-
-/**
- * Initializes global values and checks for
- * usage printing
- */
-static void
-uniq_init(int argc,
-	char **argv) {
-	uniqname = *argv;
-	in = stdin;
-	out = stdout;
-	uniq_print_occurrences = uniq_print_default;
-	/* static values initialized at zero */
-
-	if(uniq_parse_args(argc, argv) != 0) {
-		fprintf(stderr, "usage: %s [-d|-c|-u] [-f fields] "
-			"[-s char] [input_file [output_file]]\n", uniqname);
-		exit(1);
+	switch(argc - optind) {
+	case 2:
+		if(strcmp(argv[optind + 1], "-") != 0
+			&& (args.out = fopen(argv[optind + 1], "w")) == NULL) {
+			err(1, "output %s\n", argv[optind + 1]);
+		}
+		/* fallthrough */
+	case 1:
+		if(strcmp(argv[optind], "-") != 0
+			&& (args.in = fopen(argv[optind], "r")) == NULL) {
+			err(1, "input %s\n", argv[optind]);
+		}
+	case 0:
+		break;
+	default:
+		uniq_usage(*argv);
 	}
+
+	return args;
 }
 
 /**
@@ -167,14 +151,14 @@ uniq_init(int argc,
  * @param length Length of string
  * @return Truncation index of string, <= length
  */
-static size_t
-uniq_truncation(const char *string, size_t length) {
+static inline size_t
+uniq_truncation(const char *string, size_t length,
+	size_t skipfields, size_t skipchars) {
 	const char * const begin = string;
 	const char * const end = string + length;
-	size_t skipped = skipfields;
 
 	while(string != end
-		&& skipped != 0) {
+		&& skipfields != 0) {
 		while(string != end
 			&& isblank(*string)) {
 			string += 1;
@@ -183,7 +167,7 @@ uniq_truncation(const char *string, size_t length) {
 			&& !isblank(*string)) {
 			string += 1;
 		}
- 		skipped -= 1;
+ 		skipfields -= 1;
 	}
 
 	return string - begin + UNIQ_MIN(skipchars, end - string);
@@ -198,7 +182,7 @@ uniq_truncation(const char *string, size_t length) {
  * @param len2 Length of str2
  * @return Whether str1 equals str2 or not
  */
-static bool
+static inline bool
 uniq_equals(const char *str1, size_t len1,
 	const char *str2, size_t len2) {
 
@@ -210,19 +194,20 @@ uniq_equals(const char *str1, size_t len1,
 int
 main(int argc,
 	char **argv) {
+	const struct uniq_args args = uniq_parse_args(argc, argv);
 	char *line = NULL, *previous = NULL;
 	size_t linecapacity = 0, previouscapacity = 0;
 	ssize_t linelen, previouslen;
 	size_t occurrences = 0;
 	size_t truncshift = 0;
-	uniq_init(argc, argv);
 
-	while((linelen = getline(&line, &linecapacity, in)) > 0) {
-		/* Cut EOL */
-		linelen -= 1;
-		line[linelen] = '\0';
+	while((linelen = getline(&line, &linecapacity, args.in)) > 0) {
+		if(linelen != 0 && line[linelen - 1] == '\n') {
+			line[--linelen] = '\0';
+		}
 
-		size_t linetruncshift = uniq_truncation(line, linelen);
+		size_t linetruncshift = uniq_truncation(line, linelen,
+			args.skipfields, args.skipchars);
 
 		if(uniq_equals(line + linetruncshift,
 			linelen - linetruncshift,
@@ -231,7 +216,7 @@ main(int argc,
 
 			occurrences += 1;
 		} else {
-			uniq_print_occurrences(previous, occurrences);
+			args.print_occurrences(args.out, previous, occurrences);
 			occurrences = 1;
 
 			truncshift = linetruncshift;
@@ -241,7 +226,7 @@ main(int argc,
 		}
 	}
 
-	uniq_print_occurrences(previous, occurrences);
+	args.print_occurrences(args.out, previous, occurrences);
 
 #ifdef FULL_CLEANUP
 	free(line);
