@@ -6,6 +6,8 @@
 #include <ctype.h>
 #include <err.h>
 
+#include "getoptplus.h"
+
 #define UNIQ_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define UNIQ_SWAP(type, a, b) \
@@ -74,9 +76,6 @@ uniq_usage(const char *uniqname) {
 	exit(1);
 }
 
-/**
- * TODO: We only miss adding the '+' delimiter, must make a custom getopt
- */
 static struct uniq_args
 uniq_parse_args(int argc, char **argv) {
 	struct uniq_args args = {
@@ -89,7 +88,7 @@ uniq_parse_args(int argc, char **argv) {
 	char *endptr;
 	int c;
 
-	while((c = getopt(argc, argv, ":cdf:s:u")) != -1) {
+	while((c = getoptplus(argc, argv, ":cdf:s:u")) != -1) {
 		switch(c) {
 		case 'c':
 			args.print_occurrences = uniq_print_count;
