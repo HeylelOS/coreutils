@@ -99,14 +99,14 @@ uniq_parse_args(int argc, char **argv) {
 		case 'f':
 			args.skipfields = strtoul(optarg, &endptr, 10);
 			if(*endptr != '\0') {
-				warnx("%s: Ignored fields must be a decimal numeric\n", optarg);
+				warnx("%s: Ignored fields must be a decimal numeric", optarg);
 				uniq_usage(*argv);
 			}
 			break;
 		case 's':
 			args.skipchars = strtoul(optarg, &endptr, 10);
 			if(*endptr != '\0') {
-				warnx("%s: Ignored chars must be a decimal numeric\n", optarg);
+				warnx("%s: Ignored chars must be a decimal numeric", optarg);
 				uniq_usage(*argv);
 			}
 			break;
@@ -114,7 +114,7 @@ uniq_parse_args(int argc, char **argv) {
 			args.print_occurrences = uniq_print_not_repeated;
 			break;
 		case ':':
-			warnx("-%c: Missing argument\n", optopt);
+			warnx("-%c: Missing argument", optopt);
 			uniq_usage(*argv);
 		default:
 			warnx("Unknown argument -%c", c);

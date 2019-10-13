@@ -43,7 +43,7 @@ getoptplus(int argc, char * const argv[], const char *optstring) {
 					} else {
 						retval = '?';
 						if(opterr != 0) {
-							warnx("option requires an argument -- %c\n", optopt);
+							warnx("option requires an argument -- %c", optopt);
 						}
 					}
 				}
@@ -57,7 +57,7 @@ getoptplus(int argc, char * const argv[], const char *optstring) {
 		retval = '?';
 
 		if(opterr != 0 && *optstring != ':') {
-			warnx("illegal option -- %c\n", optopt);
+			warnx("illegal option -- %c", optopt);
 		}
 	}
 

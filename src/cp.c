@@ -336,7 +336,7 @@ cp_recursion_push(struct cp_recursion *recursion, mode_t sourcemode) {
 static int
 cp_recursion_pop(struct cp_recursion *recursion, const struct cp_args args) {
 	/* POSIX leaves undefined behaviour on bits other than S_IRWXA for mkdir, creat... Don't forget to leave sticky bit when chmod.
-	Note also this is only called when the directory has been succesfully created, so we can leave set-user/group-ID safely in the mask */
+	Note also this is only called when the directory has been successfully created, so we can leave set-user/group-ID safely in the mask */
 	mode_t destmask = (args.duplicate == 1 ? S_ISALL : S_ISVTX) | S_IRWXA;
 
 	if(chmod(recursion->dest.path, recursion->sourcemodes[recursion->source.count] & destmask & ~args.cmask) == -1) {
