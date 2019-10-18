@@ -53,7 +53,7 @@ do not hesitate to contact me.
 - [ ] ipcrm
 - [ ] ipcs
 - [ ] join
-- [ ] kill
+- [x] kill
 - [ ] link
 - [x] ln
 - [ ] logger
@@ -65,7 +65,7 @@ do not hesitate to contact me.
 - [ ] man
 - [ ] mesg
 - [ ] mkdir
-- [ ] mkfifo
+- [x] mkfifo
 - [ ] more
 - [ ] mv
 - [ ] newgrp

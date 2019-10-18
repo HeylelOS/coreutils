@@ -200,7 +200,7 @@ main(int argc,
 	size_t occurrences = 0;
 	size_t truncshift = 0;
 
-	while((linelen = getline(&line, &linecapacity, args.in)) > 0) {
+	while((linelen = getline(&line, &linecapacity, args.in)) > -1) {
 		if(linelen != 0 && line[linelen - 1] == '\n') {
 			line[--linelen] = '\0';
 		}
