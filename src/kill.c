@@ -246,11 +246,11 @@ main(int argc,
 		if(*endspid == '\0' && lpid <= KILL_PID_MAX && lpid >= KILL_PID_MIN) {
 			if(kill((pid_t)lpid, args.signalnumber) == -1) {
 				warn("kill %ld", lpid);
-				retval++;
+				retval = 1;
 			}
 		} else {
 			warnx("Invalid pid: %s", spid);
-			retval++;
+			retval = 1;
 		}
 
 		argpos++;

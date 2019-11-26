@@ -175,6 +175,7 @@ chmod_change(const char *file, struct stat *statp,
 			}
 		} else {
 			warnx("Unable to parse mode '%s', stopped at '%c'", modeexp, c);
+			retval = -1;
 		}
 	} else {
 		warn("stat %s", file);
@@ -227,14 +228,14 @@ main(int argc,
 									fs_recursion_push(&recursion);
 								}
 							} else {
-								retval++;
+								retval = 1;
 							}
 						}
 					} while(fs_recursion_pop(&recursion) == 0);
 
 					fs_recursion_deinit(&recursion);
 				} else {
-					retval++;
+					retval = 1;
 				}
 			}
 

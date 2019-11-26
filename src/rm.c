@@ -89,7 +89,7 @@ rm_recursion_next(struct fs_recursion *recursion) {
 }
 
 static int
-rm_recursion_pop(struct fs_recursion *recursion, int *errors, const struct rm_args args) {
+rm_recursion_pop(struct fs_recursion *recursion, int *error, const struct rm_args args) {
 	int retval = -1;
 	(void)fs_recursion_pop;
 
@@ -113,7 +113,7 @@ rm_recursion_pop(struct fs_recursion *recursion, int *errors, const struct rm_ar
 
 				warn("rmdir %s", recursion->path);
 				recursion->locations[recursion->count]++;
-				++*errors;
+				*error = -1;
 			}
 
 			while(i < recursion->locations[recursion->count]
@@ -157,7 +157,7 @@ rm_hierarchy(const char *directory, const struct rm_args args) {
 							|| (S_ISDIR(st.st_mode)
 								&& fs_recursion_push(&recursion) == -1)) {
 							recursion.locations[recursion.count]++;
-							retval++;
+							retval = -1;
 						}
 					} while(rm_recursion_next(&recursion) == 0 && *recursion.name != '\0');
 				} else {
@@ -171,12 +171,12 @@ rm_hierarchy(const char *directory, const struct rm_args args) {
 				&& rmdir(directory) == -1) {
 
 				warn("rmdir %s", directory);
-				retval++;
+				retval = -1;
 			}
 
 			fs_recursion_deinit(&recursion);
 		} else {
-			retval++;
+			retval = -1;
 		}
 	}
 
@@ -239,15 +239,17 @@ main(int argc,
 				&& S_ISDIR(st.st_mode)) {
 
 				if(args.recursive == 1) {
-					retval += rm_hierarchy(file, args);
+					if(rm_hierarchy(file, args) != 0) {
+						retval = 1;
+					}
 				} else {
 					warnx("-R or -r not specified, won't remove %s", file);
-					retval++;
+					retval = 1;
 				}
 			}
 		} else {
 			warnx("Invalid operand %s", file);
-			retval++;
+			retval = 1;
 		}
 
 		argpos++;

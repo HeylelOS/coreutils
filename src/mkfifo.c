@@ -216,7 +216,7 @@ main(int argc,
 
 		if(mkfifo(file, args.mode) == -1) {
 			warn("mkfifo %s", file);
-			retval++;
+			retval = 1;
 		}
 
 		argpos++;

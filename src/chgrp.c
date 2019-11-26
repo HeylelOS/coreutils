@@ -21,7 +21,7 @@ chgrp_at(int dirfd, const char *name, const char *path,
 	if((retval = fstatat(dirfd, name, statp, flags)) == 0) {
 		if((retval = fchownat(dirfd, name, statp->st_uid, gid, flags)) == 0) {
 			if((retval = fchmodat(dirfd, name,
-					statp->st_mode & (S_ISVTX | S_IRWXA), flags)) == -1) {
+				statp->st_mode & (S_ISVTX | S_IRWXA), flags)) == -1) {
 				warn("chmod %s", path);
 			}
 		} else {
@@ -123,13 +123,13 @@ chgrp_parse_args(int argc, char **argv) {
 }
 
 static inline bool
-chgrp_recur(const char *file, struct stat *statp, int *errors,
+chgrp_recur(const char *file, struct stat *statp, int *error,
 	const struct chgrp_args args) {
 
 	if(args.follows == 0 && S_ISLNK(statp->st_mode)
 		&& stat(file, statp) == -1) {
 		warn("stat %s", file);
-		++*errors;
+		*error = 1;
 	}
 
 	return S_ISDIR(statp->st_mode) && args.recursive == 1;
@@ -164,18 +164,18 @@ main(int argc,
 								&& S_ISDIR(st.st_mode)) {
 								fs_recursion_push(&recursion);
 							} else {
-								retval++;
+								retval = 1;
 							}
 						}
 					} while(fs_recursion_pop(&recursion) == 0);
 
 					fs_recursion_deinit(&recursion);
 				} else {
-					retval++;
+					retval = 1;
 				}
 			}
 		} else {
-			retval++;
+			retval = 1;
 		}
 
 		argpos++;

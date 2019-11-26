@@ -218,7 +218,7 @@ main(int argc,
 
 		if(mkdir(file, args.mode) == -1) {
 			warn("mkdir %s", file);
-			retval++;
+			retval = 1;
 		}
 
 		argpos++;

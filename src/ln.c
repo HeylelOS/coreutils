@@ -25,26 +25,26 @@ ln_link_argument(const char *sourcefile,
 	if(targetexists) {
 		if(args.force == 0) {
 			warnx("%s exists and -f not specified", targetfile);
-			return 1;
+			return -1;
 		}
 
 		if(strcmp(targetfile, sourcefile) == 0) {
 			/* Not totally accurate to check if the destination path
 			names the same directory entry as the current source_file */
 			warnx("%s %s name the same file", sourcefile, targetfile);
-			return 1;
+			return -1;
 		}
 
 		if(unlink(targetfile) == -1) {
 			warn("Unable to unlink %s", targetfile);
-			return 1;
+			return -1;
 		}
 	}
 
 	if(args.symbolic == 1
-		&& (retval = -symlink(targetfile, sourcefile)) == 1) {
+		&& (retval = symlink(targetfile, sourcefile)) == 1) {
 		warn("Unable to create symlink %s to %s", targetfile, sourcefile);
-	} else if((retval = -linkat(AT_FDCWD, sourcefile, AT_FDCWD, targetfile, args.flags)) == 1) {
+	} else if((retval = linkat(AT_FDCWD, sourcefile, AT_FDCWD, targetfile, args.flags)) == 1) {
 		warn("Unable to link %s to %s", targetfile, sourcefile);
 	}
 
@@ -119,23 +119,29 @@ main(int argc,
 				char *sourcefile = *argpos;
 
 				if(stpncpy(targetname, basename(sourcefile), targetend - targetname) < targetend) {
-					retval += ln_link_argument(*argpos, target, access(target, F_OK) == 0, args);
+					if(ln_link_argument(*argpos, target, access(target, F_OK) == 0, args) != 0) {
+						retval = 1;
+					}
 				} else {
 					warnx("Destination path too long for source file %s", sourcefile);
-					retval++;
+					retval = 1;
 				}
 
 				argpos++;
 			}
 		} else if(argc - optind == 2) { /* Synopsis 1 */
-			retval = ln_link_argument(*argpos, target, access(target, F_OK) == 0, args);
+			if(ln_link_argument(*argpos, target, access(target, F_OK) == 0, args)) {
+				retval = 1;
+			}
 		} else {
 			warnx("%s is not a directory", target);
 			ln_usage(*argv);
 		}
 	} else if(errno == ENOENT || errno == ENOTDIR) {
 		if(argc - optind == 2) { /* Synopsis 1 */
-			retval = ln_link_argument(*argpos, target, false, args);
+			if(ln_link_argument(*argpos, target, false, args) != 0) {
+				retval = 1;
+			}
 		} else {
 			warnx("%s doesn't exist and multiple source files were provided", target);
 			ln_usage(*argv);

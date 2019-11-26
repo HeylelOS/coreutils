@@ -381,25 +381,25 @@ cp_copy_argument(const char *sourcefile,
 								recursion.dest.path, NULL, args) == -1
 								|| (S_ISDIR(sourcestat.st_mode)
 									&& cp_recursion_push(&recursion, sourcestat.st_mode) == -1)) {
-								retval++;
+								retval = -1;
 							}
 						} else {
 							warn("Unable to stat source file %s", sourcefile);
-							retval++;
+							retval = -1;
 						}
 					}
 				} while(cp_recursion_pop(&recursion, args) == 0);
 
 				cp_recursion_deinit(&recursion);
 			} else {
-				retval++;
+				retval = -1;
 			}
 		} else {
-			retval++;
+			retval = -1;
 		}
 	} else {
 		warn("Unable to stat source file %s", sourcefile);
-		retval = 1;
+		retval = -1;
 	}
 
 	return retval;
@@ -498,25 +498,31 @@ main(int argc,
 				char *sourcefile = *argpos;
 
 				if(stpncpy(targetname, basename(sourcefile), targetend - targetname) < targetend) {
-					retval += cp_copy_argument(sourcefile, target,
+					if(cp_copy_argument(sourcefile, target,
 						lstat(target, &targetstat) == 0 ? &targetstat : NULL,
-						args);
+						args) != 0) {
+						retval = 1;
+					}
 				} else {
 					warnx("Destination path too long for source file %s", sourcefile);
-					retval++;
+					retval = 1;
 				}
 
 				argpos++;
 			}
 		} else if(argc - optind == 2) { /* Synopsis 1 */
-			retval = cp_copy_argument(*argpos, target, &targetstat, args);
+			if(cp_copy_argument(*argpos, target, &targetstat, args)) {
+				retval = 1;
+			}
 		} else {
 			warnx("%s is not a directory", target);
 			cp_usage(*argv);
 		}
 	} else if(errno == ENOENT || errno == ENOTDIR) {
 		if(argc - optind == 2) { /* Synopsis 1 */
-			retval = cp_copy_argument(*argpos, target, NULL, args);
+			if(cp_copy_argument(*argpos, target, NULL, args) != 0) {
+				retval = 1;
+			}
 		} else {
 			warnx("%s doesn't exist and multiple source files were provided", target);
 			cp_usage(*argv);

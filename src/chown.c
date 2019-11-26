@@ -155,13 +155,13 @@ chown_parse_args(int argc, char **argv) {
 }
 
 static inline bool
-chown_recur(const char *file, struct stat *statp, int *errors,
+chown_recur(const char *file, struct stat *statp, int *error,
 	const struct chown_args args) {
 
 	if(args.follows == 0 && S_ISLNK(statp->st_mode)
 		&& stat(file, statp) == -1) {
 		warn("stat %s", file);
-		++*errors;
+		*error = 1;
 	}
 
 	return S_ISDIR(statp->st_mode) && args.recursive == 1;
@@ -201,18 +201,18 @@ main(int argc,
 								&& S_ISDIR(st.st_mode)) {
 								fs_recursion_push(&recursion);
 							} else {
-								retval++;
+								retval = 1;
 							}
 						}
 					} while(fs_recursion_pop(&recursion) == 0);
 
 					fs_recursion_deinit(&recursion);
 				} else {
-					retval++;
+					retval = 1;
 				}
 			}
 		} else {
-			retval++;
+			retval = 1;
 		}
 
 		argpos++;
