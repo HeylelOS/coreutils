@@ -452,7 +452,7 @@ cp_parse_args(int argc, char **argv) {
 			}
 			/* fallthrough */
 		default:
-			warnx("Unknown argument -%c", c);
+			warnx("Unknown argument -%c", optopt);
 			cp_usage(*argv);
 		}
 	}

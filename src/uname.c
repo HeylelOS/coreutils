@@ -64,7 +64,7 @@ uname_parse_args(int argc, char **argv) {
 			args.version = 1;
 			break;
 		default:
-			warnx("Unknown argument -%c", c);
+			warnx("Unknown argument -%c", optopt);
 			uname_usage(*argv);
 		}
 	}

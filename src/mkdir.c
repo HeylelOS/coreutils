@@ -193,7 +193,7 @@ mkdir_parse_args(int argc, char **argv) {
 			warnx("-%c: Missing argument", optopt);
 			mkdir_usage(*argv);
 		default:
-			warnx("Unknown argument -%c", c);
+			warnx("Unknown argument -%c", optopt);
 			mkdir_usage(*argv);
 		}
 	}

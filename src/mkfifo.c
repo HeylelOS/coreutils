@@ -191,7 +191,7 @@ mkfifo_parse_args(int argc, char **argv) {
 			warnx("-%c: Missing argument", optopt);
 			mkfifo_usage(*argv);
 		default:
-			warnx("Unknown argument -%c", c);
+			warnx("Unknown argument -%c", optopt);
 			mkfifo_usage(*argv);
 		}
 	}

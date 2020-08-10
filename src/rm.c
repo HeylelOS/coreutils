@@ -209,7 +209,7 @@ rm_parse_args(int argc, char **argv) {
 			args.recursive = 1;
 			break;
 		default:
-			warnx("Unknown argument -%c", c);
+			warnx("Unknown argument -%c", optopt);
 			rm_usage(*argv);
 		}
 	}

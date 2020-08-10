@@ -79,7 +79,7 @@ ln_parse_args(int argc, char **argv) {
 			args.flags = 0;
 			break;
 		default:
-			warnx("Unknown argument -%c", c);
+			warnx("Unknown argument -%c", optopt);
 			ln_usage(*argv);
 		}
 	}
